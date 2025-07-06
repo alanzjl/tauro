@@ -24,12 +24,10 @@
 ## Install librealsense2
 
 1. Clone/Download the latest stable version of _librealsense2_ in one of the following ways:
-   * Clone the _librealsense2_ repo
-     ```sh
-     git clone https://github.com/IntelRealSense/librealsense.git
-     ```
-   * Download and unzip the latest stable _librealsense2_ version from `master` branch \
-     [IntelRealSense.zip](https://github.com/IntelRealSense/librealsense/archive/master.zip)
+   ```sh
+   git submodule update --init --recursive
+   cd lib/librealsense
+   ```
 
 2. Run Intel Realsense permissions script from _librealsense2_ root directory:
    ```sh
@@ -37,18 +35,26 @@
    ```
    Notice: You can always remove permissions by running: `./scripts/setup_udev_rules.sh --uninstall`
 
-3. Build and apply patched kernel modules for:
-    * Ubuntu 20/22 (focal/jammy) with LTS kernel 5.13, 5.15, 5.19, 6.2, 6.5 \
-      `./scripts/patch-realsense-ubuntu-lts-hwe.sh`
-    * Ubuntu 18/20 with LTS kernel (< 5.13) \
-     `./scripts/patch-realsense-ubuntu-lts.sh`
+## Building librealsense2 SDK
 
-    **Note:** What the *.sh script perform?
-    The script above will download, patch and build realsense-affected kernel modules (drivers). \
-    Then it will attempt to insert the patched module instead of the active one. If failed
-    the original uvc modules will be restored.
+  * Navigate to _librealsense2_ root directory and run:
+    ```sh
+    mkdir build && cd build
+    ```
+  * Run cmake configure step, note that you have to run this ***within the venv***
+    ```sh
+    cmake ../ -DBUILD_EXAMPLES=true -DBUILD_GRAPHICAL_EXAMPLES=false -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_EXECUTABLE=$(which python)
+    ```
+  * Recompile and install _librealsense2_ binaries:
+    ```sh
+    sudo make uninstall && make clean && make && sudo make install
+    ```
+    **Note:** Only relevant to CPUs with more than 1 core: use `make -j$(($(nproc)-1)) install` allow parallel compilation.
 
-   >  Check the patched modules installation by examining the generated log as well as inspecting the latest entries in kernel log: \
-       `sudo dmesg | tail -n 50` \
-       The log should indicate that a new _uvcvideo_ driver has been registered.  
-       Refer to [Troubleshooting](#troubleshooting-installation-and-patch-related-issues) in case of errors/warning reports.
+    **Note:** The shared object will be installed in `/usr/local/lib`, header files in `/usr/local/include`. \
+    The binary demos, tutorials and test files will be copied into `/usr/local/bin`
+
+   * The compiled python bindings will be located at `lib/librealsense/build/Release`. Make sure to source `env_setup.sh` or do
+      ```sh
+      export PYTHONPATH=$PYTHONPATH:./lib/librealsense/build/Release
+      ```

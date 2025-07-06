@@ -58,6 +58,18 @@ from tauro import Robot
 # Example usage will be added here
 ```
 
+## Visualize Camera views
+
+For single or dual regular camera(s), run
+```sh
+python scripts/stream_camera.py --width 848 --height 480 --fps 30 --camera1 0 --camera2 2 --port 5000
+```
+
+For RealSense camera, run
+```sh
+python scripts/stream_realsense.py --width 848 --height 480 --fps 30 --colormap viridis --port 5000
+```
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details. 

@@ -4,4 +4,4 @@
 source .venv/bin/activate
 
 # Add RealSense SDK to Python path
-export PYTHONPATH=$PYTHONPATH:/home/azhao/src/tauro/lib/librealsense/build/Release
+export PYTHONPATH=$PYTHONPATH:./lib/librealsense/build/Release
