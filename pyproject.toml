@@ -62,5 +62,5 @@ line-ending = "auto"
 "__init__.py" = ["E501"]
 
 [tool.ruff.lint]
-fixable = ["E501"]
+fixable = ["E", "F", "I", "RUF"]
 unfixable = []
