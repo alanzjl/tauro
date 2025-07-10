@@ -1,4 +1,3 @@
-from .tables import *  # noqa: F403
-from .feetech import FeetechMotorsBus, OperatingMode, DriveMode, TorqueMode
+from .feetech import DriveMode, FeetechMotorsBus, OperatingMode, TorqueMode
 
 __all__ = ["FeetechMotorsBus", "OperatingMode", "DriveMode", "TorqueMode"]
