@@ -1,25 +1,16 @@
-#!/usr/bin/env python
-
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import logging
-import os
 import sys
+import threading
 import time
 from queue import Queue
 from typing import Any
+
+try:
+    import sshkeyboard
+
+    SSHKEYBOARD_AVAILABLE = True
+except ImportError:
+    SSHKEYBOARD_AVAILABLE = False
 
 from tauro.common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
@@ -28,21 +19,6 @@ from .configuration_keyboard import (
     KeyboardEndEffectorTeleopConfig,
     KeyboardTeleopConfig,
 )
-
-PYNPUT_AVAILABLE = True
-try:
-    if ("DISPLAY" not in os.environ) and ("linux" in sys.platform):
-        logging.info("No DISPLAY set. Skipping pynput import.")
-        raise ImportError("pynput blocked intentionally due to no display.")
-
-    from pynput import keyboard
-except ImportError:
-    keyboard = None
-    PYNPUT_AVAILABLE = False
-except Exception as e:
-    keyboard = None
-    PYNPUT_AVAILABLE = False
-    logging.info(f"Could not import pynput: {e}")
 
 
 class KeyboardTeleop(Teleoperator):
@@ -58,9 +34,11 @@ class KeyboardTeleop(Teleoperator):
         self.config = config
 
         self.event_queue = Queue()
-        self.current_pressed = {}
-        self.listener = None
+        self.listener_thread = None
+        self.stop_event = threading.Event()
         self.logs = {}
+        self.current_pressed_keys = set()
+        self.last_repeat_time = time.monotonic()
 
     @property
     def action_features(self) -> dict:
@@ -77,9 +55,9 @@ class KeyboardTeleop(Teleoperator):
     @property
     def is_connected(self) -> bool:
         return (
-            PYNPUT_AVAILABLE
-            and isinstance(self.listener, keyboard.Listener)
-            and self.listener.is_alive()
+            self.listener_thread is not None
+            and self.listener_thread.is_alive()
+            and not self.stop_event.is_set()
         )
 
     @property
@@ -92,54 +70,62 @@ class KeyboardTeleop(Teleoperator):
                 "Keyboard is already connected. Do not run `robot.connect()` twice."
             )
 
-        if PYNPUT_AVAILABLE:
-            logging.info("pynput is available - enabling local keyboard listener.")
-            self.listener = keyboard.Listener(
-                on_press=self._on_press,
-                on_release=self._on_release,
+        if not SSHKEYBOARD_AVAILABLE:
+            logging.warning("sshkeyboard not available - keyboard input disabled")
+            return
+
+        # Check if we're in an interactive terminal
+        if not sys.stdin.isatty():
+            logging.warning(
+                "Not running in an interactive terminal - keyboard input disabled"
             )
-            self.listener.start()
-        else:
-            logging.info("pynput not available - skipping local keyboard listener.")
-            self.listener = None
+            logging.info("Run directly in a terminal to enable keyboard control")
+            return
+
+        logging.info("Starting sshkeyboard listener.")
+        self.stop_event.clear()
+        self.listener_thread = threading.Thread(target=self._keyboard_listener)
+        self.listener_thread.daemon = True
+        self.listener_thread.start()
 
     def calibrate(self) -> None:
         pass
 
-    def _on_press(self, key):
-        if hasattr(key, "char"):
-            self.event_queue.put((key.char, True))
+    def _keyboard_listener(self):
+        """Run sshkeyboard listener in a separate thread."""
 
-    def _on_release(self, key):
-        if hasattr(key, "char"):
-            self.event_queue.put((key.char, False))
-        if key == keyboard.Key.esc:
-            logging.info("ESC pressed, disconnecting.")
-            self.disconnect()
+        def on_press(key):
+            if not self.stop_event.is_set():
+                self.event_queue.put((key, True))
+                if key == "esc":
+                    logging.info("ESC pressed, disconnecting.")
+                    self.stop_event.set()
+                    sshkeyboard.stop_listening()
+
+        def on_release(key):
+            if not self.stop_event.is_set():
+                self.event_queue.put((key, False))
+
+        sshkeyboard.listen_keyboard(
+            on_press=on_press,
+            on_release=on_release,
+            until=None,  # Don't stop on any key, we'll use stop_listening() instead
+            sequential=False,
+        )
 
     def _drain_pressed_keys(self):
         while not self.event_queue.empty():
             key_char, is_pressed = self.event_queue.get_nowait()
-            self.current_pressed[key_char] = is_pressed
+            if is_pressed:
+                self.current_pressed_keys.add(key_char)
+            else:
+                self.current_pressed_keys.remove(key_char)
 
     def configure(self):
         pass
 
     def get_action(self) -> dict[str, Any]:
-        before_read_t = time.perf_counter()
-
-        if not self.is_connected:
-            raise DeviceNotConnectedError(
-                "KeyboardTeleop is not connected. You need to run `connect()` before `get_action()`."
-            )
-
-        self._drain_pressed_keys()
-
-        # Generate action based on current key states
-        action = {key for key, val in self.current_pressed.items() if val}
-        self.logs["read_pos_dt_s"] = time.perf_counter() - before_read_t
-
-        return dict.fromkeys(action, None)
+        raise NotImplementedError("KeyboardTeleop does not support get_action()")
 
     def send_feedback(self, feedback: dict[str, Any]) -> None:
         pass
@@ -149,8 +135,14 @@ class KeyboardTeleop(Teleoperator):
             raise DeviceNotConnectedError(
                 "KeyboardTeleop is not connected. You need to run `robot.connect()` before `disconnect()`."
             )
-        if self.listener is not None:
-            self.listener.stop()
+        self.stop_event.set()
+        if SSHKEYBOARD_AVAILABLE and sys.stdin.isatty():
+            try:
+                sshkeyboard.stop_listening()
+            except Exception:
+                pass  # Ignore errors when stopping
+        if self.listener_thread is not None:
+            self.listener_thread.join(timeout=2.0)
 
 
 class KeyboardEndEffectorTeleop(KeyboardTeleop):
@@ -182,16 +174,6 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
                 "names": {"delta_x": 0, "delta_y": 1, "delta_z": 2},
             }
 
-    def _on_press(self, key):
-        if hasattr(key, "char"):
-            key = key.char
-        self.event_queue.put((key, True))
-
-    def _on_release(self, key):
-        if hasattr(key, "char"):
-            key = key.char
-        self.event_queue.put((key, False))
-
     def get_action(self) -> dict[str, Any]:
         if not self.is_connected:
             raise DeviceNotConnectedError(
@@ -199,36 +181,39 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
             )
 
         self._drain_pressed_keys()
+
+        if time.monotonic() - self.last_repeat_time < self.config.repeat_delay:
+            return {}
+
         delta_x = 0.0
         delta_y = 0.0
         delta_z = 0.0
+        gripper_action = 1  # default gripper action is to stay
 
         # Generate action based on current key states
-        for key, val in self.current_pressed.items():
-            if key == keyboard.Key.up:
-                delta_x = int(val)
-            elif key == keyboard.Key.down:
-                delta_x = -int(val)
-            elif key == keyboard.Key.left:
-                delta_y = int(val)
-            elif key == keyboard.Key.right:
-                delta_y = -int(val)
-            elif key == keyboard.Key.shift:
-                delta_z = -int(val)
-            elif key == keyboard.Key.shift_r:
-                delta_z = int(val)
-            elif key == keyboard.Key.ctrl_r:
+        for key in self.current_pressed_keys:
+            if key == "w":
+                delta_x = self.config.magnitude
+            elif key == "s":
+                delta_x = -self.config.magnitude
+            elif key == "a":
+                delta_y = self.config.magnitude
+            elif key == "d":
+                delta_y = -self.config.magnitude
+            elif key == "q":
+                delta_z = -self.config.magnitude
+            elif key == "e":
+                delta_z = self.config.magnitude
+            elif key == "r":
                 # Gripper actions are expected to be between 0 (close), 1 (stay), 2 (open)
-                gripper_action = int(val) + 1
-            elif key == keyboard.Key.ctrl_l:
-                gripper_action = int(val) - 1
-            elif val:
+                gripper_action = 2
+            elif key == "f":
+                gripper_action = 0
+            elif key:
                 # If the key is pressed, add it to the misc_keys_queue
                 # this will record key presses that are not part of the delta_x, delta_y, delta_z
                 # this is useful for retrieving other events like interventions for RL, episode success, etc.
                 self.misc_keys_queue.put(key)
-
-        self.current_pressed.clear()
 
         action_dict = {
             "delta_x": delta_x,
@@ -236,8 +221,9 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
             "delta_z": delta_z,
         }
 
-        gripper_action = 1  # default gripper action is to stay
         if self.config.use_gripper:
             action_dict["gripper"] = gripper_action
+
+        self.last_repeat_time = time.monotonic()
 
         return action_dict

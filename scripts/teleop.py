@@ -1,8 +1,10 @@
 import time
 from pathlib import Path
 
-from tauro.common.robots.so100_follower import (
+from tauro.common.robots.so100_follower.so100_follower_end_effector import (
     SO100FollowerEndEffector,
+)
+from tauro.common.robots.so100_follower.config_so100_follower import (
     SO100FollowerEndEffectorConfig,
 )
 from tauro.common.teleoperators.keyboard import (
@@ -27,11 +29,7 @@ teleop = KeyboardEndEffectorTeleop(
 robot.connect()
 teleop.connect()
 
-for i in range(10):
-    action = action_dict = {
-        "delta_x": 0,
-        "delta_y": 0,
-        "delta_z": 0.1,
-    }
+while True:
+    action = teleop.get_action()
     robot.send_action(action)
-    time.sleep(1)
+    time.sleep(0.1)

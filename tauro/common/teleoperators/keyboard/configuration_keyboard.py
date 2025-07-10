@@ -23,6 +23,8 @@ from tauro.common.teleoperators.teleoperator import TeleoperatorConfig
 class KeyboardTeleopConfig(TeleoperatorConfig):
     # TODO(Steven): Consider setting in here the keys that we want to capture/listen
     mock: bool = False
+    repeat_delay: float = 0.1
+    magnitude: float = 0.2
 
 
 @dataclass

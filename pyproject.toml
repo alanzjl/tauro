@@ -15,6 +15,7 @@ dependencies = [
     "tqdm",
     "scipy",
     "draccus",
+    "sshkeyboard",
 ]
 
 [project.optional-dependencies]
