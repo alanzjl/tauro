@@ -1,0 +1,200 @@
+syntax = "proto3";
+
+package tauro.common.proto;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Main service for robot control
+service RobotControlService {
+  // Establish connection to robot
+  rpc Connect(ConnectRequest) returns (ConnectResponse);
+  
+  // Disconnect from robot
+  rpc Disconnect(DisconnectRequest) returns (DisconnectResponse);
+  
+  // Calibrate robot
+  rpc Calibrate(CalibrateRequest) returns (CalibrateResponse);
+  
+  // Stream control commands and receive state updates
+  rpc StreamControl(stream ControlCommand) returns (stream RobotState);
+  
+  // Get current robot state
+  rpc GetState(GetStateRequest) returns (RobotState);
+  
+  // Send single action
+  rpc SendAction(ActionCommand) returns (ActionResponse);
+  
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthStatus);
+}
+
+// Request/Response messages
+message ConnectRequest {
+  string robot_id = 1;
+  string robot_type = 2;
+  map<string, string> config = 3;
+}
+
+message ConnectResponse {
+  bool success = 1;
+  string message = 2;
+  RobotInfo robot_info = 3;
+}
+
+message DisconnectRequest {
+  string robot_id = 1;
+}
+
+message DisconnectResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message CalibrateRequest {
+  string robot_id = 1;
+}
+
+message CalibrateResponse {
+  bool success = 1;
+  string message = 2;
+  map<string, MotorCalibration> calibrations = 3;
+}
+
+message GetStateRequest {
+  string robot_id = 1;
+}
+
+// Core data structures
+message RobotInfo {
+  string robot_id = 1;
+  string robot_type = 2;
+  repeated string motor_names = 3;
+  map<string, FeatureInfo> observation_space = 4;
+  map<string, FeatureInfo> action_space = 5;
+}
+
+message FeatureInfo {
+  repeated int32 shape = 1;
+  string dtype = 2;
+  repeated string names = 3;
+}
+
+message RobotState {
+  google.protobuf.Timestamp timestamp = 1;
+  string robot_id = 2;
+  map<string, JointState> joints = 3;
+  map<string, SensorData> sensors = 4;
+  RobotStatus status = 5;
+  EndEffectorState end_effector = 6;
+}
+
+message EndEffectorState {
+  // Position in Cartesian space (x, y, z)
+  repeated float position = 1;
+  // Orientation as quaternion (x, y, z, w) or rotation matrix (9 values)
+  repeated float orientation = 2;
+  // Linear velocity (vx, vy, vz)
+  repeated float linear_velocity = 3;
+  // Angular velocity (wx, wy, wz)
+  repeated float angular_velocity = 4;
+  // Forces (fx, fy, fz)
+  repeated float force = 5;
+  // Torques (tx, ty, tz)
+  repeated float torque = 6;
+}
+
+message JointState {
+  float position = 1;
+  float velocity = 2;
+  float torque = 3;
+  float temperature = 4;
+  bool is_calibrated = 5;
+}
+
+message SensorData {
+  oneof data {
+    FloatArray float_array = 1;
+    IntArray int_array = 2;
+    bytes raw_bytes = 3;
+  }
+}
+
+message FloatArray {
+  repeated float values = 1;
+}
+
+message IntArray {
+  repeated int32 values = 1;
+}
+
+message ControlCommand {
+  google.protobuf.Timestamp timestamp = 1;
+  string robot_id = 2;
+  map<string, float> joint_commands = 3;
+  ControlMode control_mode = 4;
+}
+
+message ActionCommand {
+  string robot_id = 1;
+  oneof command {
+    JointCommand joint_command = 2;
+    EndEffectorCommand end_effector_command = 3;
+  }
+}
+
+message JointCommand {
+  map<string, float> positions = 1;
+}
+
+message EndEffectorCommand {
+  // Delta movements in Cartesian space
+  float delta_x = 1;
+  float delta_y = 2;
+  float delta_z = 3;
+  // Optional: delta orientation (quaternion or euler angles)
+  repeated float delta_orientation = 4;
+  // Gripper command (0-1 or delta)
+  float gripper = 5;
+}
+
+message ActionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message MotorCalibration {
+  string motor_name = 1;
+  float offset = 2;
+  float homing_position = 3;
+  float index_position = 4;
+}
+
+message HealthStatus {
+  bool is_healthy = 1;
+  map<string, ComponentHealth> components = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message ComponentHealth {
+  bool is_healthy = 1;
+  string status = 2;
+  string message = 3;
+}
+
+// Enums
+enum RobotStatus {
+  ROBOT_STATUS_UNKNOWN = 0;
+  ROBOT_STATUS_DISCONNECTED = 1;
+  ROBOT_STATUS_CONNECTED = 2;
+  ROBOT_STATUS_CALIBRATING = 3;
+  ROBOT_STATUS_READY = 4;
+  ROBOT_STATUS_ERROR = 5;
+}
+
+enum ControlMode {
+  CONTROL_MODE_POSITION = 0;
+  CONTROL_MODE_VELOCITY = 1;
+  CONTROL_MODE_TORQUE = 2;
+  CONTROL_MODE_IMPEDANCE = 3;
+}

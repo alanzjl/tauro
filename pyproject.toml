@@ -1,78 +1,137 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "tauro"
 version = "0.1.0"
-description = "A Python package for robot control"
+description = "Modular robot control framework with edge and inference separation"
+readme = "README_REFACTORED.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Hugging Face"},
 ]
-readme = "README.md"
-requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
 dependencies = [
-    "flask>=2.0.0",
-    "opencv-python>=4.5.0", 
-    "pyserial",
-    "deepdiff",
-    "tqdm",
-    "scipy",
-    "draccus",
-    "sshkeyboard",
+    # Common dependencies
+    "numpy>=1.24.0",
+    "grpcio>=1.60.0",
+    "grpcio-tools>=1.60.0",
+    "protobuf>=4.0.0",
+    "draccus>=0.8.0",
+    
+    # Edge dependencies
+    "pyserial>=3.5",
+    "deepdiff>=6.0.0",
+    "tqdm>=4.0.0",
+    
+    # Inference dependencies
+    "sshkeyboard>=2.3.1",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.4.0",
-    "ruff>=0.1.9",
-    "pre-commit>=3.5.0",
-    "ipython",
+# Motor-specific dependencies
+feetech = [
+    "feetech-servo-sdk>=1.0.0",
 ]
-feetech = ["feetech-servo-sdk>=1.0.0"]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+]
 
-[tool.setuptools.packages.find]
-include = ["tauro"]
+# Visualization dependencies
+viz = [
+    "opencv-python>=4.0.0",
+    "matplotlib>=3.0.0",
+    "flask>=2.0.0",
+]
 
-# [tool.ruff]
-# # Enable pycodestyle (E), pyflakes (F), isort (I), plus all recommended rules (RUF)
-# select = ["F", "I", "RUF"]
-# ignore = ["E501"]  # Disable line too long, let formatter handle it
-# line-length = 88
-# fix = true
-# extend-exclude = [
-#     ".bzr",
-#     ".direnv",
-#     ".eggs",
-#     ".git",
-#     ".git-rewrite",
-#     ".hg",
-#     ".mypy_cache",
-#     ".nox",
-#     ".pants.d",
-#     ".pytype",
-#     ".ruff_cache",
-#     ".svn",
-#     ".tox",
-#     ".venv",
-#     "__pypackages__",
-#     "_build",
-#     "buck-out",
-#     "build",
-#     "dist",
-#     "node_modules",
-#     "venv",
-# ]
+# RealSense camera support
+realsense = [
+    "pyrealsense2>=2.50.0",
+]
 
-# [tool.ruff.format]
-# quote-style = "double"
-# indent-style = "space"
-# skip-magic-trailing-comma = false
-# line-ending = "auto"
+# All optional dependencies
+all = [
+    "tauro[feetech,dev,viz,realsense]",
+]
 
-# [tool.ruff.per-file-ignores]
-# "__init__.py" = ["E501"]
+[project.scripts]
+tauro-edge = "tauro_edge.main:main"
+tauro-teleop = "tauro_inference.teleop.keyboard_remote:main"
+tauro-compile-proto = "scripts.compile_proto:compile_proto"
 
-# [tool.ruff.lint]
-# fixable = ["F", "I", "RUF"]
-# unfixable = []
+[tool.setuptools]
+packages = [
+    "tauro_common",
+    "tauro_edge", 
+    "tauro_inference",
+]
+
+[tool.setuptools.package-data]
+tauro_common = ["proto/*.proto"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501", # line too long (handled by black)
+    "B008", # do not perform function calls in argument defaults
+    "W191", # indentation contains tabs
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
+"*_pb2*.py" = ["F401", "F403", "E501"]  # Generated protobuf files
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["tauro_common", "tauro_edge", "tauro_inference"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "*_pb2*.py",  # Generated files
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

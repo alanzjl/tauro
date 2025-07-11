@@ -1,0 +1,13 @@
+# Robot ID to physical port mapping configuration
+# This file maps robot IDs to their physical serial/USB ports
+
+robots:
+  robot_001:
+    port: "/dev/ttyACM0"
+    type: "so100_follower"
+  robot_002:
+    port: "/dev/ttyACM1"
+    type: "so100_follower"
+  robot_003:
+    port: "/dev/ttyUSB0"
+    type: "so101_follower"
