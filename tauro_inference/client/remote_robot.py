@@ -1,9 +1,7 @@
 """Remote robot interface that communicates with tauro_edge via gRPC."""
 
 import logging
-from typing import Any, Optional
-
-import numpy as np
+from typing import Any
 
 from tauro_common.constants import DEFAULT_GRPC_HOST, DEFAULT_GRPC_PORT
 from tauro_common.types.robot_types import RobotState
@@ -21,7 +19,7 @@ class RemoteRobot:
         robot_type: str,
         host: str = DEFAULT_GRPC_HOST,
         port: int = DEFAULT_GRPC_PORT,
-        config: Optional[dict] = None,
+        config: dict | None = None,
     ):
         self.robot_id = robot_id
         self.robot_type = robot_type
@@ -29,7 +27,7 @@ class RemoteRobot:
         self.client = RobotClient(host=host, port=port)
         self._connected = False
         self._robot_info = None
-        self._latest_state: Optional[RobotState] = None
+        self._latest_state: RobotState | None = None
 
     def connect(self):
         """Connect to the robot through the edge server."""
@@ -82,23 +80,26 @@ class RemoteRobot:
         # Convert state to observation format
         obs = {}
 
-        # Extract joint states into observation.state
+        # Extract joint states
         if state.joints:
-            motor_names = sorted(state.joints.keys())
-            num_motors = len(motor_names)
+            for name, joint in state.joints.items():
+                obs[f"{name}.pos"] = joint.position
+                if hasattr(joint, "velocity") and joint.velocity is not None:
+                    obs[f"{name}.vel"] = joint.velocity
+                if hasattr(joint, "torque") and joint.torque is not None:
+                    obs[f"{name}.torque"] = joint.torque
 
-            positions = [state.joints[name].position for name in motor_names]
-            # velocities = [state.joints[name].velocity for name in motor_names]
-            # torques = [state.joints[name].torque for name in motor_names]
+        # Add end effector state if available
+        if hasattr(state, "end_effector") and state.end_effector:
+            if hasattr(state.end_effector, "position"):
+                obs["end_effector.pos"] = state.end_effector.position
+            if hasattr(state.end_effector, "orientation"):
+                obs["end_effector.orientation"] = state.end_effector.orientation
 
-            for name in motor_names:
-                obs[f"{name}.pos"] = state.joints[name].position
-                # obs[f"{name}.vel"] = state.joints[name].velocity
-                # obs[f"{name}.torque"] = state.joints[name].torque
-
-        # # Add sensor data
-        # for key, data in state.sensors.items():
-        #     obs[key] = data
+        # Add sensor data
+        if hasattr(state, "sensors") and state.sensors:
+            for key, data in state.sensors.items():
+                obs[key] = data
 
         return obs
 
@@ -107,29 +108,7 @@ class RemoteRobot:
         if not self._connected:
             raise RuntimeError("Robot not connected")
 
-        # Extract action array
-        if "action" not in action:
-            raise ValueError("Action dict must contain 'action' key")
-
-        action_array = action["action"]
-        if not isinstance(action_array, np.ndarray):
-            action_array = np.array(action_array, dtype=np.float32)
-
-        # Convert to joint commands
-        if self._latest_state and self._latest_state.joints:
-            motor_names = sorted(self._latest_state.joints.keys())
-            if len(action_array) != len(motor_names):
-                raise ValueError(
-                    f"Action size {len(action_array)} doesn't match "
-                    f"number of motors {len(motor_names)}"
-                )
-
-            joint_commands = {name: float(action_array[i]) for i, name in enumerate(motor_names)}
-        else:
-            # Fallback: assume action indices map to motor indices
-            joint_commands = {f"motor_{i}": float(val) for i, val in enumerate(action_array)}
-
-        return self.client.send_action(self.robot_id, joint_commands)
+        return self.client.send_action(self.robot_id, action)
 
     @property
     def is_connected(self) -> bool:

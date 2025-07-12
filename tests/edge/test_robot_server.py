@@ -179,9 +179,13 @@ class TestRobotControlServicer:
         mock_robot.connect()
         server.robots["test_robot"] = mock_robot
 
-        request = robot_service_pb2.ActionCommand(
-            robot_id="test_robot", actions={"motor_1": 0.5, "motor_2": -0.5}
-        )
+        # Create a control command with joint positions
+        joint_cmd = robot_service_pb2.JointCommand()
+        joint_cmd.positions["motor_1"] = 0.5
+        joint_cmd.positions["motor_2"] = -0.5
+
+        request = robot_service_pb2.ControlCommand(robot_id="test_robot")
+        request.joint_command.CopyFrom(joint_cmd)
 
         response = server.SendAction(request, None)
 
@@ -228,10 +232,13 @@ class TestGRPCIntegration:
             assert state.robot_id == "test_robot"
 
             # Send action
-            action_req = robot_service_pb2.ActionCommand(
-                robot_id="test_robot", actions={"motor_1": 0.5}
-            )
-            action_resp = stub.SendAction(action_req)
+            joint_cmd = robot_service_pb2.JointCommand()
+            joint_cmd.positions["motor_1"] = 0.5
+
+            control_req = robot_service_pb2.ControlCommand(robot_id="test_robot")
+            control_req.joint_command.CopyFrom(joint_cmd)
+
+            action_resp = stub.SendAction(control_req)
             assert action_resp.success is True
 
             # Health check

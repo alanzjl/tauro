@@ -219,8 +219,8 @@ class TestRobotClient:
         # Connect first
         client.connect_robot("test_robot", "so100_follower")
 
-        # Send action
-        success = client.send_action("test_robot", {"motor_1": 0.5, "motor_2": -0.5})
+        # Send action with joint positions
+        success = client.send_action("test_robot", {"motor_1.pos": 0.5, "motor_2.pos": -0.5})
 
         assert success is True
 
@@ -268,12 +268,16 @@ class TestAsyncRobotClient:
         # Create command generator
         async def command_generator():
             for i in range(3):
-                yield ControlCommand(
+                cmd = ControlCommand(
                     timestamp=time.time(),
                     robot_id="test_robot",
-                    joint_commands={"motor_1": float(i)},
                     control_mode=ControlMode.POSITION,
                 )
+                # Create a joint command
+                joint_cmd = robot_service_pb2.JointCommand()
+                joint_cmd.positions["motor_1"] = float(i)
+                cmd.joint_command = joint_cmd
+                yield cmd
 
         # Stream control
         states = []

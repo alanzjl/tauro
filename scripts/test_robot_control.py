@@ -35,7 +35,7 @@ def test_joint_control(robot):
             new_pos = current_pos + delta
             action = {f"{motor_name}.pos": new_pos}
             print(f"Moving {motor_name} from {current_pos:.3f} to {new_pos:.3f}")
-            robot.send_action({"action": action})
+            robot.send_action(action)
             time.sleep(0.5)  # Small delay between movements
 
     # Return to original position

@@ -111,8 +111,8 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
                     success=False, message=f"Unknown robot type: {robot_type}"
                 )
 
-            # Connect to robot
-            robot.connect()
+            # Connect to robot without forcing calibration
+            robot.connect(calibrate=False)
             self._register_robot(robot_id, robot)
 
             # Prepare robot info
@@ -342,16 +342,7 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
                 if ee_cmd.delta_orientation:
                     action["end_effector"]["delta_orientation"] = list(ee_cmd.delta_orientation)
             else:
-                # Legacy format - backwards compatibility
-                action_values = (
-                    list(request.actions.values()) if hasattr(request, "actions") else []
-                )
-                if action_values:
-                    action = {"action": np.array(action_values, dtype=np.float32)}
-                else:
-                    return robot_service_pb2.ActionResponse(
-                        success=False, message="No action command specified"
-                    )
+                raise ValueError("Invalid action command")
 
             # Send action
             robot.send_action(action)
@@ -383,13 +374,30 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
                 timestamp = proto_to_timestamp(command.timestamp)
                 control_mode = proto_to_control_mode(command.control_mode)
 
-                # Convert joint commands to action
-                motor_names = list(robot.motor_configs.keys())
-                action_values = [command.joint_commands.get(name, 0.0) for name in motor_names]
-                action = np.array(action_values, dtype=np.float32)
-
-                # Send action to robot
-                robot.send_action({"action": action})
+                # Check which type of command was sent
+                if command.HasField("joint_command"):
+                    # Joint space command
+                    joint_cmd = command.joint_command
+                    action = {}
+                    for motor_name, position in joint_cmd.positions.items():
+                        action[f"{motor_name}.pos"] = position
+                    robot.send_action(action)
+                elif command.HasField("end_effector_command"):
+                    # End effector space command
+                    ee_cmd = command.end_effector_command
+                    action = {
+                        "end_effector": {
+                            "delta_x": ee_cmd.delta_x,
+                            "delta_y": ee_cmd.delta_y,
+                            "delta_z": ee_cmd.delta_z,
+                            "gripper": ee_cmd.gripper,
+                        }
+                    }
+                    if ee_cmd.delta_orientation:
+                        action["end_effector"]["delta_orientation"] = list(ee_cmd.delta_orientation)
+                    robot.send_action(action)
+                else:
+                    logger.warning(f"No valid command in ControlCommand for robot {robot_id}")
 
                 # Get current state and yield back
                 obs = robot.get_observation()

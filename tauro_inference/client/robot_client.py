@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Optional
 
@@ -149,15 +150,45 @@ class RobotClient:
             logger.error(f"gRPC error getting robot state: {e}")
             return None
 
-    def send_action(self, robot_id: str, action: dict[str, float]) -> bool:
+    def send_action(self, robot_id: str, action: dict) -> bool:
         """Send a single action command to a robot."""
         if self.stub is None:
             raise RuntimeError("Not connected to server")
 
-        request = robot_service_pb2.ActionCommand(robot_id=robot_id, actions=action)
+        # Create control command based on action type
+        control_cmd = robot_service_pb2.ControlCommand(
+            timestamp=timestamp_to_proto(time.time()),
+            robot_id=robot_id,
+        )
+
+        # Check if it's a joint command or end effector command
+        if "positions" in action or all(k.endswith(".pos") for k in action.keys()):
+            # Joint command
+            joint_cmd = robot_service_pb2.JointCommand()
+            if "positions" in action:
+                joint_cmd.positions.update(action["positions"])
+            else:
+                # Convert motor_name.pos format to positions dict
+                positions = {k.removesuffix(".pos"): v for k, v in action.items()}
+                joint_cmd.positions.update(positions)
+            control_cmd.joint_command.CopyFrom(joint_cmd)
+        elif "end_effector" in action:
+            # End effector command
+            ee_data = action["end_effector"]
+            ee_cmd = robot_service_pb2.EndEffectorCommand(
+                delta_x=ee_data.get("delta_x", 0.0),
+                delta_y=ee_data.get("delta_y", 0.0),
+                delta_z=ee_data.get("delta_z", 0.0),
+                gripper=ee_data.get("gripper", 0.0),
+            )
+            if "delta_orientation" in ee_data:
+                ee_cmd.delta_orientation.extend(ee_data["delta_orientation"])
+            control_cmd.end_effector_command.CopyFrom(ee_cmd)
+        else:
+            raise ValueError(f"Invalid action format: {action}")
 
         try:
-            response = self.stub.SendAction(request)
+            response = self.stub.SendAction(control_cmd)
             if not response.success:
                 logger.error(f"Failed to send action: {response.message}")
             return response.success
@@ -239,9 +270,13 @@ class RobotClient:
                     proto_command = robot_service_pb2.ControlCommand(
                         timestamp=timestamp_to_proto(command.timestamp),
                         robot_id=command.robot_id,
-                        joint_commands=command.joint_commands,
                         control_mode=control_mode_to_proto(command.control_mode),
                     )
+                    # Set the appropriate command type
+                    if hasattr(command, "joint_command") and command.joint_command:
+                        proto_command.joint_command.CopyFrom(command.joint_command)
+                    elif hasattr(command, "end_effector_command") and command.end_effector_command:
+                        proto_command.end_effector_command.CopyFrom(command.end_effector_command)
                     yield proto_command
 
             # Start streaming
@@ -391,15 +426,45 @@ class AsyncRobotClient:
             logger.error(f"gRPC error getting robot state: {e}")
             return None
 
-    async def send_action(self, robot_id: str, action: dict[str, float]) -> bool:
+    async def send_action(self, robot_id: str, action: dict) -> bool:
         """Send a single action command to a robot."""
         if self.stub is None:
             raise RuntimeError("Not connected to server")
 
-        request = robot_service_pb2.ActionCommand(robot_id=robot_id, actions=action)
+        # Create control command based on action type
+        control_cmd = robot_service_pb2.ControlCommand(
+            timestamp=timestamp_to_proto(time.time()),
+            robot_id=robot_id,
+        )
+
+        # Check if it's a joint command or end effector command
+        if "positions" in action or all(k.endswith(".pos") for k in action.keys()):
+            # Joint command
+            joint_cmd = robot_service_pb2.JointCommand()
+            if "positions" in action:
+                joint_cmd.positions.update(action["positions"])
+            else:
+                # Convert motor_name.pos format to positions dict
+                positions = {k.removesuffix(".pos"): v for k, v in action.items()}
+                joint_cmd.positions.update(positions)
+            control_cmd.joint_command.CopyFrom(joint_cmd)
+        elif "end_effector" in action:
+            # End effector command
+            ee_data = action["end_effector"]
+            ee_cmd = robot_service_pb2.EndEffectorCommand(
+                delta_x=ee_data.get("delta_x", 0.0),
+                delta_y=ee_data.get("delta_y", 0.0),
+                delta_z=ee_data.get("delta_z", 0.0),
+                gripper=ee_data.get("gripper", 0.0),
+            )
+            if "delta_orientation" in ee_data:
+                ee_cmd.delta_orientation.extend(ee_data["delta_orientation"])
+            control_cmd.end_effector_command.CopyFrom(ee_cmd)
+        else:
+            raise ValueError(f"Invalid action format: {action}")
 
         try:
-            response = await self.stub.SendAction(request)
+            response = await self.stub.SendAction(control_cmd)
             if not response.success:
                 logger.error(f"Failed to send action: {response.message}")
             return response.success
@@ -428,12 +493,17 @@ class AsyncRobotClient:
         # Convert commands to protobuf
         async def proto_command_generator():
             async for command in command_iterator:
-                yield robot_service_pb2.ControlCommand(
+                proto_command = robot_service_pb2.ControlCommand(
                     timestamp=timestamp_to_proto(command.timestamp),
                     robot_id=command.robot_id,
-                    joint_commands=command.joint_commands,
                     control_mode=control_mode_to_proto(command.control_mode),
                 )
+                # Set the appropriate command type
+                if hasattr(command, "joint_command") and command.joint_command:
+                    proto_command.joint_command.CopyFrom(command.joint_command)
+                elif hasattr(command, "end_effector_command") and command.end_effector_command:
+                    proto_command.end_effector_command.CopyFrom(command.end_effector_command)
+                yield proto_command
 
         # Stream and convert responses
         stream = self.stub.StreamControl(proto_command_generator())

@@ -23,7 +23,7 @@ service RobotControlService {
   rpc GetState(GetStateRequest) returns (RobotState);
   
   // Send single action
-  rpc SendAction(ActionCommand) returns (ActionResponse);
+  rpc SendAction(ControlCommand) returns (ActionResponse);
   
   // Health check
   rpc HealthCheck(google.protobuf.Empty) returns (HealthStatus);
@@ -131,17 +131,13 @@ message IntArray {
 message ControlCommand {
   google.protobuf.Timestamp timestamp = 1;
   string robot_id = 2;
-  map<string, float> joint_commands = 3;
-  ControlMode control_mode = 4;
+  oneof command {
+    JointCommand joint_command = 3;
+    EndEffectorCommand end_effector_command = 4;
+  }
+  ControlMode control_mode = 5;
 }
 
-message ActionCommand {
-  string robot_id = 1;
-  oneof command {
-    JointCommand joint_command = 2;
-    EndEffectorCommand end_effector_command = 3;
-  }
-}
 
 message JointCommand {
   map<string, float> positions = 1;
