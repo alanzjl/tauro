@@ -5,7 +5,6 @@ import logging
 import time
 from concurrent import futures
 from pathlib import Path
-from typing import Optional
 
 import grpc
 import numpy as np
@@ -22,8 +21,6 @@ from tauro_common.types.robot_types import (
 from tauro_common.utils.proto_utils import (
     feature_info_to_proto,
     motor_calibration_to_proto,
-    proto_to_control_mode,
-    proto_to_timestamp,
     robot_state_to_proto,
     timestamp_to_proto,
 )
@@ -56,7 +53,7 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
             logger.error(f"Error loading robot configs: {e}")
             return {}
 
-    def _get_robot(self, robot_id: str) -> Optional[Robot]:
+    def _get_robot(self, robot_id: str) -> Robot | None:
         """Get robot instance by ID."""
         return self.robots.get(robot_id)
 
@@ -123,17 +120,37 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
             )
 
             # Add observation and action space info
-            for name, feature in robot.observation_space.items():
-                robot_info.observation_space[name].CopyFrom(
-                    feature_info_to_proto(
-                        FeatureInfo(
-                            shape=feature["shape"],
-                            dtype=feature["dtype"].name,
-                            names=feature.get("names"),
+            for space, space_feature in robot.observation_space.items():
+                # "joint" or "end_effector"
+                for space_type, type_feature in space_feature.items():
+                    # "position" or "velocity"
+                    if space == "joint":
+                        for joint_name, joint_feature in type_feature.items():
+                            robot_info.observation_space[
+                                f"{space}.{space_type}.{joint_name}"
+                            ].CopyFrom(
+                                feature_info_to_proto(
+                                    FeatureInfo(
+                                        shape=joint_feature["shape"],
+                                        dtype=joint_feature["dtype"].name,
+                                        names=joint_feature.get("names"),
+                                    )
+                                )
+                            )
+                    elif space == "end_effector":
+                        robot_info.observation_space[f"{space}.{space_type}"].CopyFrom(
+                            feature_info_to_proto(
+                                FeatureInfo(
+                                    shape=type_feature["shape"],
+                                    dtype=type_feature["dtype"].name,
+                                    names=type_feature.get("names"),
+                                )
+                            )
                         )
-                    )
-                )
+                    else:
+                        raise ValueError(f"Unknown space: {space}")
 
+            # TODO: fix action space as well!
             for name, feature in robot.action_space.items():
                 robot_info.action_space[name].CopyFrom(
                     feature_info_to_proto(
@@ -371,8 +388,6 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
                     continue
 
                 # Process control command
-                timestamp = proto_to_timestamp(command.timestamp)
-                control_mode = proto_to_control_mode(command.control_mode)
 
                 # Check which type of command was sent
                 if command.HasField("joint_command"):
@@ -406,6 +421,7 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
                 joints = {}
                 if "observation.state" in obs:
                     state_data = obs["observation.state"]
+                    motor_names = list(robot.motor_configs.keys())
                     num_motors = len(motor_names)
 
                     for i, motor_name in enumerate(motor_names):
@@ -444,7 +460,7 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
         for robot_id, robot in self.robots.items():
             try:
                 # Try to get observation as health check
-                obs = robot.get_observation()
+                robot.get_observation()
                 components[robot_id] = robot_service_pb2.ComponentHealth(
                     is_healthy=True, status="connected", message="Robot responding normally"
                 )

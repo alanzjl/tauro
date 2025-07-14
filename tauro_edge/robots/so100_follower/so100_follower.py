@@ -16,7 +16,6 @@
 
 import logging
 import time
-from functools import cached_property
 from typing import Any
 
 import numpy as np
@@ -48,9 +47,7 @@ class SO100Follower(Robot):
         super().__init__(config)
         self.config = config
         norm_mode_body = (
-            MotorNormMode.DEGREES
-            if config.use_degrees or config.enable_end_effector_control
-            else MotorNormMode.RANGE_M100_100
+            MotorNormMode.DEGREES if config.use_degrees else MotorNormMode.RANGE_M100_100
         )
         self.bus = FeetechMotorsBus(
             port=self.config.port,
@@ -65,12 +62,11 @@ class SO100Follower(Robot):
             calibration=self.calibration,
         )
 
-        # Initialize kinematics if end effector control is enabled
-        if config.enable_end_effector_control:
-            self.kinematics = RobotKinematics(robot_type="so_new_calibration")
-            self.current_ee_pos = None
-            self.current_joint_pos = None
-            self.ee_frame = "gripper_tip"
+        # Initialize kinematics for end effector control
+        self.kinematics = RobotKinematics(robot_type="so_new_calibration")
+        self.current_ee_pos = None
+        self.current_joint_pos = None
+        self.ee_frame = "gripper_tip"
 
     @property
     def motor_configs(self) -> dict[str, Any]:
@@ -80,39 +76,57 @@ class SO100Follower(Robot):
     def observation_space(self) -> dict[str, dict]:
         """Return observation space in OpenAI Gym format."""
         motor_names = list(self.bus.motors.keys())
+
+        # Joint space observation
+        joint_space = {
+            "position": {
+                motor: {"shape": (), "dtype": np.dtype(np.float32), "names": None}
+                for motor in motor_names
+            },
+            "velocity": {
+                motor: {"shape": (), "dtype": np.dtype(np.float32), "names": None}
+                for motor in motor_names
+            },
+        }
+
+        # End effector observation
+        end_effector_space = {
+            "position": {
+                "shape": (3,),
+                "dtype": np.dtype(np.float32),
+                "names": ["x", "y", "z"],
+            },
+            "orientation": {
+                "shape": (9,),
+                "dtype": np.dtype(np.float32),
+                "names": None,
+            },
+        }
+
         return {
-            f"{motor}.pos": {"shape": (), "dtype": np.dtype(np.float32), "names": None}
-            for motor in motor_names
+            "joint": joint_space,
+            "end_effector": end_effector_space,
         }
 
     @property
     def action_space(self) -> dict[str, dict]:
         """Return action space in OpenAI Gym format."""
-        if self.config.enable_end_effector_control:
-            # End effector control space
-            return {
-                "end_effector": {
-                    "shape": (4,),  # delta_x, delta_y, delta_z, gripper
-                    "dtype": np.dtype(np.float32),
-                    "names": ["delta_x", "delta_y", "delta_z", "gripper"],
-                },
-                "joints": self.observation_space,  # Also support joint control
-            }
-        else:
-            # Joint control space only
-            return self.observation_space
-
-    @property
-    def _motors_ft(self) -> dict[str, type]:
-        return {f"{motor}.pos": float for motor in self.bus.motors}
-
-    @cached_property
-    def observation_features(self) -> dict[str, type | tuple]:
-        return self._motors_ft
-
-    @cached_property
-    def action_features(self) -> dict[str, type]:
-        return self._motors_ft
+        motor_names = list(self.bus.motors.keys())
+        joint_space = {
+            f"{motor}.pos": {"shape": (), "dtype": np.dtype(np.float32), "names": None}
+            for motor in motor_names
+        }
+        # Support both joint and end effector control
+        return {
+            # Joint control
+            **joint_space,
+            # End effector control
+            "end_effector": {
+                "shape": (4,),  # delta_x, delta_y, delta_z, gripper
+                "dtype": np.dtype(np.float32),
+                "names": ["delta_x", "delta_y", "delta_z", "gripper"],
+            },
+        }
 
     @property
     def is_connected(self) -> bool:
@@ -191,21 +205,36 @@ class SO100Follower(Robot):
         if not self.is_connected:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        # Read arm position
+        # Read arm position and velocity
         start = time.perf_counter()
-        obs_dict = self.bus.sync_read("Present_Position")
-        obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
+        position_dict = self.bus.sync_read("Present_Position")
+        velocity_dict = self.bus.sync_read("Present_Velocity")
 
-        # Add end effector position if enabled
-        if self.config.enable_end_effector_control:
-            joint_positions = np.array([obs_dict[f"{name}.pos"] for name in self.bus.motors])
-            ee_pos = self.kinematics.forward_kinematics(joint_positions, frame=self.ee_frame)
-            obs_dict["end_effector.pos"] = ee_pos[:3, 3]  # Extract x, y, z position
-            obs_dict["end_effector.orientation"] = ee_pos[:3, :3].flatten()  # 3x3 rotation matrix
+        # Build joint observation dictionary
+        joint_obs = {
+            "position": {motor: position_dict[motor] for motor in self.bus.motors},
+            "velocity": {motor: velocity_dict[motor] for motor in self.bus.motors},
+        }
 
-            # Update current state for end effector control
-            self.current_joint_pos = joint_positions
-            self.current_ee_pos = ee_pos
+        # Calculate end effector state
+        joint_positions = np.array([position_dict[name] for name in self.bus.motors])
+        ee_pos = self.kinematics.forward_kinematics(joint_positions, frame=self.ee_frame)
+
+        # Build end effector observation dictionary
+        end_effector_obs = {
+            "position": ee_pos[:3, 3],  # Extract x, y, z position
+            "orientation": ee_pos[:3, :3].flatten(),  # 3x3 rotation matrix as flat array
+        }
+
+        # Update current state for end effector control
+        self.current_joint_pos = joint_positions
+        self.current_ee_pos = ee_pos
+
+        # Build final observation dictionary
+        obs_dict = {
+            "joint": joint_obs,
+            "end_effector": end_effector_obs,
+        }
 
         dt_ms = (time.perf_counter() - start) * 1e3
         logger.debug(f"{self} read state: {dt_ms:.1f}ms")
@@ -232,7 +261,7 @@ class SO100Follower(Robot):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         # Check if this is an end effector action
-        if "end_effector" in action and self.config.enable_end_effector_control:
+        if "end_effector" in action:
             return self._send_end_effector_action(action["end_effector"])
 
         # Otherwise, process as joint action

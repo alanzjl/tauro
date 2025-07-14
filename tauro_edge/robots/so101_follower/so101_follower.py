@@ -16,7 +16,6 @@
 
 import logging
 import time
-from functools import cached_property
 from typing import Any
 
 import numpy as np
@@ -107,14 +106,6 @@ class SO101Follower(Robot):
             cam: (self.config.cameras[cam].height, self.config.cameras[cam].width, 3)
             for cam in self.cameras
         }
-
-    @cached_property
-    def observation_features(self) -> dict[str, type | tuple]:
-        return {**self._motors_ft, **self._cameras_ft}
-
-    @cached_property
-    def action_features(self) -> dict[str, type]:
-        return self._motors_ft
 
     @property
     def is_connected(self) -> bool:

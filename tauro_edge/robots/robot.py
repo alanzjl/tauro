@@ -55,34 +55,6 @@ class Robot(abc.ABC):
     def __str__(self) -> str:
         return f"{self.id} {self.__class__.__name__}"
 
-    # TODO(aliberts): create a proper Feature class for this that links with datasets
-    @property
-    @abc.abstractmethod
-    def observation_features(self) -> dict:
-        """
-        A dictionary describing the structure and types of the observations produced by the robot.
-        Its structure (keys) should match the structure of what is returned by :pymeth:`get_observation`.
-        Values for the dict should either be:
-            - The type of the value if it's a simple value, e.g. `float` for single proprioceptive value (a joint's position/velocity)
-            - A tuple representing the shape if it's an array-type value, e.g. `(height, width, channel)` for images
-
-        Note: this property should be able to be called regardless of whether the robot is connected or not.
-        """
-        pass
-
-    @property
-    @abc.abstractmethod
-    def action_features(self) -> dict:
-        """
-        A dictionary describing the structure and types of the actions expected by the robot. Its structure
-        (keys) should match the structure of what is passed to :pymeth:`send_action`. Values for the dict
-        should be the type of the value if it's a simple value, e.g. `float` for single proprioceptive value
-        (a joint's goal position/velocity)
-
-        Note: this property should be able to be called regardless of whether the robot is connected or not.
-        """
-        pass
-
     @property
     @abc.abstractmethod
     def is_connected(self) -> bool:
@@ -167,9 +139,7 @@ class Robot(abc.ABC):
         Send an action command to the robot.
 
         Args:
-            action (dict[str, Any]): Dictionary representing the desired action. Its structure should match
-                :pymeth:`action_features`.
-
+            action (dict[str, Any]): Dictionary representing the desired action.
         Returns:
             dict[str, Any]: The action actually sent to the motors potentially clipped or modified, e.g. by
                 safety limits on velocity.

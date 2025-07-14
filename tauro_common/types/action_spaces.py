@@ -1,7 +1,9 @@
 from enum import Enum
 
+
 class ActionSpace(Enum):
     """Command types for robot actions."""
+
     JOINT_POSITION = "joint_position"
     JOINT_VELOCITY = "joint_velocity"
     JOINT_TORQUE = "joint_torque"

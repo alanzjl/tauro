@@ -24,7 +24,7 @@ def test_joint_control(robot):
         if key.endswith(".pos"):
             motor_name = key.removesuffix(".pos")
             joint_positions[motor_name] = obs[key]
-            print(f"{motor_name}: {obs[key]:.3f}")
+            print(f"{motor_name}: {obs[key]}")
 
     # Apply small delta to each joint
     print("\nApplying small delta to joints...")
@@ -34,7 +34,7 @@ def test_joint_control(robot):
         if motor_name != "gripper":  # Skip gripper for safety
             new_pos = current_pos + delta
             action = {f"{motor_name}.pos": new_pos}
-            print(f"Moving {motor_name} from {current_pos:.3f} to {new_pos:.3f}")
+            print(f"Moving {motor_name} from {current_pos} to {new_pos}")
             robot.send_action(action)
             time.sleep(0.5)  # Small delay between movements
 
@@ -61,9 +61,7 @@ def test_end_effector_control(robot):
             f"Current end effector position: x={ee_pos[0]:.3f}, y={ee_pos[1]:.3f}, z={ee_pos[2]:.3f}"
         )
     else:
-        print(
-            "End effector state not available. Make sure robot has enable_end_effector_control=True"
-        )
+        print("End effector state not available.")
         return
 
     # Define test movements
@@ -85,7 +83,7 @@ def test_end_effector_control(robot):
         if movement["delta_z"] != 0:
             direction.append(f"Z={movement['delta_z']:+.3f}")
 
-        print(f"\nMovement {i+1}: {', '.join(direction)}")
+        print(f"\nMovement {i + 1}: {', '.join(direction)}")
 
         # Send end effector command
         action = {"end_effector": movement}
