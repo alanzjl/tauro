@@ -5,6 +5,7 @@ from typing import Any
 
 from tauro_common.constants import DEFAULT_GRPC_HOST, DEFAULT_GRPC_PORT
 from tauro_common.types.robot_types import RobotState
+from tauro_common.utils.proto_utils import robot_state_proto_to_dict
 from tauro_inference.client.robot_client import RobotClient
 
 logger = logging.getLogger(__name__)
@@ -78,29 +79,8 @@ class RemoteRobot:
         self._latest_state = state
 
         # Convert state to observation format
-        obs = {}
-
-        # Extract joint states
-        if state.joints:
-            for name, joint in state.joints.items():
-                obs[f"{name}.pos"] = joint.position
-                if hasattr(joint, "velocity") and joint.velocity is not None:
-                    obs[f"{name}.vel"] = joint.velocity
-                if hasattr(joint, "torque") and joint.torque is not None:
-                    obs[f"{name}.torque"] = joint.torque
-
-        # Add end effector state if available
-        if hasattr(state, "end_effector") and state.end_effector:
-            if hasattr(state.end_effector, "position"):
-                obs["end_effector.pos"] = state.end_effector.position
-            if hasattr(state.end_effector, "orientation"):
-                obs["end_effector.orientation"] = state.end_effector.orientation
-
-        # Add sensor data
-        if hasattr(state, "sensors") and state.sensors:
-            for key, data in state.sensors.items():
-                obs[key] = data
-
+        breakpoint()
+        obs = robot_state_proto_to_dict(state)
         return obs
 
     def send_action(self, action: dict[str, Any]) -> bool:

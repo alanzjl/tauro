@@ -232,7 +232,7 @@ class SO100Follower(Robot):
 
         # Build final observation dictionary
         obs_dict = {
-            "joint": joint_obs,
+            "joints": joint_obs,
             "end_effector": end_effector_obs,
         }
 

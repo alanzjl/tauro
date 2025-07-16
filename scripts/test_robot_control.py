@@ -18,9 +18,11 @@ def test_joint_control(robot):
     obs = robot.get_observation()
     print(f"Current observation keys: {list(obs.keys())}")
 
+    print(obs["joint"])
+
     # Extract joint positions
     joint_positions = {}
-    for key in obs.keys():
+    for key in obs["joint"].keys():
         if key.endswith(".pos"):
             motor_name = key.removesuffix(".pos")
             joint_positions[motor_name] = obs[key]

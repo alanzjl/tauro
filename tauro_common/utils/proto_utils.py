@@ -1,6 +1,6 @@
 """Utilities for converting between protobuf messages and Python types."""
 
-from typing import Optional
+from typing import Any
 
 import numpy as np
 from google.protobuf import timestamp_pb2
@@ -139,9 +139,7 @@ def numpy_to_proto_sensor_data(data: NDArray) -> proto.SensorData:
     return sensor_data
 
 
-def proto_to_numpy_sensor_data(
-    proto_data: proto.SensorData, shape: Optional[tuple] = None
-) -> NDArray:
+def proto_to_numpy_sensor_data(proto_data: proto.SensorData, shape: tuple | None = None) -> NDArray:
     """Convert protobuf SensorData to numpy array."""
     if proto_data.HasField("float_array"):
         data = np.array(proto_data.float_array.values, dtype=np.float32)
@@ -204,6 +202,91 @@ def proto_to_end_effector_state(proto_ee: proto.EndEffectorState) -> EndEffector
         force=np.array(proto_ee.force) if proto_ee.force else None,
         torque=np.array(proto_ee.torque) if proto_ee.torque else None,
     )
+
+
+def robot_state_dict_to_proto(
+    state_dict: dict[str, Any], is_calibrated: bool, robot_id: str, timestamp: float
+) -> proto.RobotState:
+    """Convert Python RobotState to protobuf."""
+
+    # Convert to RobotState
+    joints = {}
+    motor_names = list(state_dict["joints"]["position"].keys())
+
+    # Check if state_dict contains individual motor positions
+    motor_positions = {}
+    for motor_name, value in state_dict["joints"]["position"].items():
+        motor_positions[motor_name] = value
+    motor_velocities = {}
+    for motor_name, value in state_dict["joints"]["velocity"].items():
+        motor_velocities[motor_name] = value
+
+    for motor_name in motor_names:
+        position = motor_positions.get(motor_name, 0.0)
+        velocity = motor_velocities.get(motor_name, 0.0)
+        joints[motor_name] = JointState(
+            position=float(position),
+            velocity=float(velocity),
+            torque=0.0,  # Not available in current implementation
+            temperature=0.0,  # Not available in current implementation
+            is_calibrated=is_calibrated,
+        )
+
+    # Prepare end effector data
+    ee_pos = state_dict["end_effector"].get("position", np.zeros(3))
+    ee_orientation = state_dict["end_effector"].get("orientation", np.zeros(9))
+    ee_linear_velocity = state_dict["end_effector"].get("linear_velocity", np.zeros(3))
+    ee_angular_velocity = state_dict["end_effector"].get("angular_velocity", np.zeros(3))
+    ee_force = state_dict["end_effector"].get("force", np.zeros(3))
+    ee_torque = state_dict["end_effector"].get("torque", np.zeros(3))
+
+    ee_state = EndEffectorState(
+        position=ee_pos,
+        orientation=ee_orientation,
+        linear_velocity=ee_linear_velocity,
+        angular_velocity=ee_angular_velocity,
+        force=ee_force,
+        torque=ee_torque,
+    )
+
+    # Prepare sensor data
+    sensors = {}
+
+    robot_state = proto.RobotState()
+    robot_state.timestamp.CopyFrom(timestamp_to_proto(timestamp))
+    robot_state.robot_id = robot_id
+    robot_state.status = robot_status_to_proto(
+        RobotStatus.READY if is_calibrated else RobotStatus.CONNECTED
+    )
+    for name, joint in joints.items():
+        robot_state.joints[name].CopyFrom(joint_state_to_proto(joint))
+    for name, data in sensors.items():
+        robot_state.sensors[name].CopyFrom(numpy_to_proto_sensor_data(data))
+    robot_state.end_effector.CopyFrom(end_effector_state_to_proto(ee_state))
+
+    return robot_state
+
+
+def robot_state_proto_to_dict(proto_state: proto.RobotState) -> dict[str, Any]:
+    """Convert protobuf RobotState to Python."""
+    state_dict = {}
+    state_dict["timestamp"] = proto_to_timestamp(proto_state.timestamp)
+    ### BUG????
+    state_dict["robot_id"] = proto_state.robot_id
+    state_dict["status"] = proto_to_robot_status(proto_state.status)
+    state_dict["joints"] = {
+        "position": {name: joint.position for name, joint in proto_state.joints.items()},
+        "velocity": {name: joint.velocity for name, joint in proto_state.joints.items()},
+    }
+    state_dict["end_effector"] = {
+        "position": proto_state.end_effector.position,
+        "orientation": proto_state.end_effector.orientation,
+        "linear_velocity": proto_state.end_effector.linear_velocity,
+        "angular_velocity": proto_state.end_effector.angular_velocity,
+        "force": proto_state.end_effector.force,
+        "torque": proto_state.end_effector.torque,
+    }
+    return state_dict
 
 
 def robot_state_to_proto(state: RobotState) -> proto.RobotState:

@@ -7,7 +7,6 @@ from concurrent import futures
 from pathlib import Path
 
 import grpc
-import numpy as np
 import yaml
 
 from tauro_common.constants import DEFAULT_GRPC_HOST, DEFAULT_GRPC_PORT, MAX_MESSAGE_SIZE
@@ -21,6 +20,7 @@ from tauro_common.types.robot_types import (
 from tauro_common.utils.proto_utils import (
     feature_info_to_proto,
     motor_calibration_to_proto,
+    robot_state_dict_to_proto,
     robot_state_to_proto,
     timestamp_to_proto,
 )
@@ -252,74 +252,8 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
             # Get observation from robot
             obs = robot.get_observation()
 
-            # Convert to RobotState
-            joints = {}
-            motor_names = list(robot.motor_configs.keys())
-
-            # Check if observation contains individual motor positions
-            motor_positions = {}
-            for key, value in obs.items():
-                if key.endswith(".pos"):
-                    motor_name = key.removesuffix(".pos")
-                    motor_positions[motor_name] = value
-
-            if motor_positions:
-                # Use individual motor positions
-                for motor_name in motor_names:
-                    position = motor_positions.get(motor_name, 0.0)
-                    joints[motor_name] = JointState(
-                        position=float(position),
-                        velocity=0.0,  # Not available in current implementation
-                        torque=0.0,  # Not available in current implementation
-                        temperature=0.0,  # Not available in current implementation
-                        is_calibrated=robot.is_calibrated,
-                    )
-            elif "observation.state" in obs:
-                # Use packed state format
-                state_data = obs["observation.state"]
-                num_motors = len(motor_names)
-
-                for i, motor_name in enumerate(motor_names):
-                    joints[motor_name] = JointState(
-                        position=float(state_data[i]),
-                        velocity=float(state_data[i + num_motors]),
-                        torque=float(state_data[i + 2 * num_motors]),
-                        temperature=0.0,  # Not available in current implementation
-                        is_calibrated=robot.is_calibrated,
-                    )
-
-            # Prepare sensor data
-            sensors = {}
-            end_effector_state = None
-
-            for key, value in obs.items():
-                if key == "end_effector.pos":
-                    # Extract end effector position
-                    if end_effector_state is None:
-                        end_effector_state = {}
-                    end_effector_state["position"] = value
-                elif key == "end_effector.orientation":
-                    # Extract end effector orientation
-                    if end_effector_state is None:
-                        end_effector_state = {}
-                    end_effector_state["orientation"] = value
-                elif key != "observation.state" and not key.endswith(".pos"):
-                    # Other sensor data
-                    if isinstance(value, np.ndarray):
-                        sensors[key] = value
-                    else:
-                        sensors[key] = np.array(value)
-
-            robot_state = RobotState(
-                timestamp=time.time(),
-                robot_id=robot_id,
-                joints=joints,
-                sensors=sensors,
-                status=RobotStatus.READY if robot.is_calibrated else RobotStatus.CONNECTED,
-                end_effector=end_effector_state,
-            )
-
-            return robot_state_to_proto(robot_state)
+            robot_state = robot_state_dict_to_proto(obs, robot.is_calibrated, robot_id, time.time())
+            return robot_state
 
         except Exception as e:
             logger.error(f"Error getting state for robot {robot_id}: {e}")
