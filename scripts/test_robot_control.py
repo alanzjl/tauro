@@ -18,15 +18,13 @@ def test_joint_control(robot):
     obs = robot.get_observation()
     print(f"Current observation keys: {list(obs.keys())}")
 
-    print(obs["joint"])
+    print(obs["joints"])
 
     # Extract joint positions
     joint_positions = {}
-    for key in obs["joint"].keys():
-        if key.endswith(".pos"):
-            motor_name = key.removesuffix(".pos")
-            joint_positions[motor_name] = obs[key]
-            print(f"{motor_name}: {obs[key]}")
+    for motor_name, val in obs["joints"]["position"].items():
+        joint_positions[motor_name] = val
+        print(f"{motor_name}: {val}")
 
     # Apply small delta to each joint
     print("\nApplying small delta to joints...")

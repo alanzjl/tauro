@@ -5,7 +5,7 @@ from typing import Any
 
 from tauro_common.constants import DEFAULT_GRPC_HOST, DEFAULT_GRPC_PORT
 from tauro_common.types.robot_types import RobotState
-from tauro_common.utils.proto_utils import robot_state_proto_to_dict
+from tauro_common.utils.proto_utils import robot_state_to_dict
 from tauro_inference.client.robot_client import RobotClient
 
 logger = logging.getLogger(__name__)
@@ -79,8 +79,7 @@ class RemoteRobot:
         self._latest_state = state
 
         # Convert state to observation format
-        breakpoint()
-        obs = robot_state_proto_to_dict(state)
+        obs = robot_state_to_dict(state)
         return obs
 
     def send_action(self, action: dict[str, Any]) -> bool:

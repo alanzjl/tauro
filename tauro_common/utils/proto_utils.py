@@ -267,24 +267,24 @@ def robot_state_dict_to_proto(
     return robot_state
 
 
-def robot_state_proto_to_dict(proto_state: proto.RobotState) -> dict[str, Any]:
-    """Convert protobuf RobotState to Python."""
+def robot_state_to_dict(robot_state: RobotState) -> dict[str, Any]:
+    """Convert python RobotState to Python."""
+    assert not isinstance(robot_state, proto.RobotState) and isinstance(robot_state, RobotState)
     state_dict = {}
-    state_dict["timestamp"] = proto_to_timestamp(proto_state.timestamp)
-    ### BUG????
-    state_dict["robot_id"] = proto_state.robot_id
-    state_dict["status"] = proto_to_robot_status(proto_state.status)
+    state_dict["timestamp"] = robot_state.timestamp
+    state_dict["robot_id"] = robot_state.robot_id
+    state_dict["status"] = robot_state.status
     state_dict["joints"] = {
-        "position": {name: joint.position for name, joint in proto_state.joints.items()},
-        "velocity": {name: joint.velocity for name, joint in proto_state.joints.items()},
+        "position": {name: joint.position for name, joint in robot_state.joints.items()},
+        "velocity": {name: joint.velocity for name, joint in robot_state.joints.items()},
     }
     state_dict["end_effector"] = {
-        "position": proto_state.end_effector.position,
-        "orientation": proto_state.end_effector.orientation,
-        "linear_velocity": proto_state.end_effector.linear_velocity,
-        "angular_velocity": proto_state.end_effector.angular_velocity,
-        "force": proto_state.end_effector.force,
-        "torque": proto_state.end_effector.torque,
+        "position": robot_state.end_effector.position,
+        "orientation": robot_state.end_effector.orientation,
+        "linear_velocity": robot_state.end_effector.linear_velocity,
+        "angular_velocity": robot_state.end_effector.angular_velocity,
+        "force": robot_state.end_effector.force,
+        "torque": robot_state.end_effector.torque,
     }
     return state_dict
 
