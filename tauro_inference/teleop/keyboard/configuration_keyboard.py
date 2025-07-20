@@ -16,7 +16,7 @@
 
 from dataclasses import dataclass
 
-from tauro.common.teleoperators.teleoperator import TeleoperatorConfig
+from ..config import TeleoperatorConfig
 
 
 @dataclass

@@ -13,13 +13,9 @@
 # limitations under the License.
 
 import abc
-from pathlib import Path
 from typing import Any
 
-import draccus
-
-from tauro_common.constants import default_calibration_path
-from tauro_common.types.robot_types import MotorCalibration
+from tauro_inference.client import RemoteRobot
 
 from .config import TeleoperatorConfig
 
@@ -40,21 +36,12 @@ class Teleoperator(abc.ABC):
     config_class: type[TeleoperatorConfig]
     name: str
 
-    def __init__(self, config: TeleoperatorConfig):
-        self.id = config.id
-        self.calibration_dir = (
-            config.calibration_dir
-            if config.calibration_dir
-            else default_calibration_path / "teleoperators" / self.name
-        )
-        self.calibration_dir.mkdir(parents=True, exist_ok=True)
-        self.calibration_fpath = self.calibration_dir / f"{self.id}.json"
-        self.calibration: dict[str, MotorCalibration] = {}
-        if self.calibration_fpath.is_file():
-            self._load_calibration()
+    def __init__(self, config: TeleoperatorConfig, robot: RemoteRobot | None = None):
+        self.config = config
+        self.robot = robot
 
     def __str__(self) -> str:
-        return f"{self.id} {self.__class__.__name__}"
+        return f"{self.__class__.__name__}"
 
     @property
     @abc.abstractmethod
@@ -118,27 +105,9 @@ class Teleoperator(abc.ABC):
         """
         pass
 
-    def _load_calibration(self, fpath: Path | None = None) -> None:
-        """
-        Helper to load calibration data from the specified file.
-
-        Args:
-            fpath (Path | None): Optional path to the calibration file. Defaults to `self.calibration_fpath`.
-        """
-        fpath = self.calibration_fpath if fpath is None else fpath
-        with open(fpath) as f, draccus.config_type("json"):
-            self.calibration = draccus.load(dict[str, MotorCalibration], f)
-
-    def _save_calibration(self, fpath: Path | None = None) -> None:
-        """
-        Helper to save calibration data to the specified file.
-
-        Args:
-            fpath (Path | None): Optional path to save the calibration file. Defaults to `self.calibration_fpath`.
-        """
-        fpath = self.calibration_fpath if fpath is None else fpath
-        with open(fpath, "w") as f, draccus.config_type("json"):
-            draccus.dump(self.calibration, f, indent=4)
+    def set_robot(self, robot: RemoteRobot) -> None:
+        """Set the robot instance for this teleoperator."""
+        self.robot = robot
 
     @abc.abstractmethod
     def configure(self) -> None:

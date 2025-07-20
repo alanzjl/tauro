@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import abc
 from dataclasses import dataclass
-from pathlib import Path
 
 
-@dataclass(kw_only=True)
-class TeleoperatorConfig(abc.ABC):
-    # Allows to distinguish between different teleoperators of the same type
-    id: str | None = None
-    # Directory to store calibration file
-    calibration_dir: Path | None = None
+@dataclass
+class TeleoperatorConfig:
+    """Base configuration for all teleoperators."""
+
+    pass

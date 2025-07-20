@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Union
 
 from numpy.typing import NDArray
 
@@ -33,7 +32,7 @@ class FeatureInfo:
 
     shape: tuple[int, ...]
     dtype: str
-    names: Optional[list[str]] = None
+    names: list[str] | None = None
 
 
 @dataclass
@@ -51,12 +50,12 @@ class JointState:
 class EndEffectorState:
     """End effector state in Cartesian space."""
 
-    position: Optional[NDArray] = None  # [x, y, z]
-    orientation: Optional[NDArray] = None  # Quaternion or rotation matrix
-    linear_velocity: Optional[NDArray] = None  # [vx, vy, vz]
-    angular_velocity: Optional[NDArray] = None  # [wx, wy, wz]
-    force: Optional[NDArray] = None  # [fx, fy, fz]
-    torque: Optional[NDArray] = None  # [tx, ty, tz]
+    position: NDArray | None = None  # [x, y, z]
+    orientation: NDArray | None = None  # Quaternion or rotation matrix
+    linear_velocity: NDArray | None = None  # [vx, vy, vz]
+    angular_velocity: NDArray | None = None  # [wx, wy, wz]
+    force: NDArray | None = None  # [fx, fy, fz]
+    torque: NDArray | None = None  # [tx, ty, tz]
 
 
 @dataclass
@@ -68,7 +67,7 @@ class RobotState:
     joints: dict[str, JointState]
     sensors: dict[str, NDArray]
     status: RobotStatus
-    end_effector: Optional[Union[EndEffectorState, dict]] = None
+    end_effector: EndEffectorState | dict | None = None
 
 
 @dataclass

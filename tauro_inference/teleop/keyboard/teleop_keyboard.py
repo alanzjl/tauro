@@ -12,7 +12,8 @@ try:
 except ImportError:
     SSHKEYBOARD_AVAILABLE = False
 
-from tauro.common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
+
+from tauro_inference.client import RemoteRobot
 
 from ..teleoperator import Teleoperator
 from .configuration_keyboard import (
@@ -29,8 +30,8 @@ class KeyboardTeleop(Teleoperator):
     config_class = KeyboardTeleopConfig
     name = "keyboard"
 
-    def __init__(self, config: KeyboardTeleopConfig):
-        super().__init__(config)
+    def __init__(self, config: KeyboardTeleopConfig, robot: RemoteRobot | None = None):
+        super().__init__(config, robot)
         self.config = config
 
         self.event_queue = Queue()
@@ -42,10 +43,18 @@ class KeyboardTeleop(Teleoperator):
 
     @property
     def action_features(self) -> dict:
+        if self.robot:
+            obs = self.robot.get_observation()
+            motor_names = [k.replace(".pos", "") for k in obs.keys() if k.endswith(".pos")]
+            return {
+                "dtype": "float32",
+                "shape": (len(motor_names),),
+                "names": {"motors": motor_names},
+            }
         return {
             "dtype": "float32",
-            "shape": (len(self.arm),),
-            "names": {"motors": list(self.arm.motors)},
+            "shape": (0,),
+            "names": {"motors": []},
         }
 
     @property
@@ -66,9 +75,8 @@ class KeyboardTeleop(Teleoperator):
 
     def connect(self) -> None:
         if self.is_connected:
-            raise DeviceAlreadyConnectedError(
-                "Keyboard is already connected. Do not run `robot.connect()` twice."
-            )
+            logging.warning("Keyboard is already connected.")
+            return
 
         if not SSHKEYBOARD_AVAILABLE:
             logging.warning("sshkeyboard not available - keyboard input disabled")
@@ -130,9 +138,8 @@ class KeyboardTeleop(Teleoperator):
 
     def disconnect(self) -> None:
         if not self.is_connected:
-            raise DeviceNotConnectedError(
-                "KeyboardTeleop is not connected. You need to run `robot.connect()` before `disconnect()`."
-            )
+            logging.warning("KeyboardTeleop is not connected.")
+            return
         self.stop_event.set()
         if SSHKEYBOARD_AVAILABLE and sys.stdin.isatty():
             try:
@@ -152,8 +159,8 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
     config_class = KeyboardEndEffectorTeleopConfig
     name = "keyboard_ee"
 
-    def __init__(self, config: KeyboardEndEffectorTeleopConfig):
-        super().__init__(config)
+    def __init__(self, config: KeyboardEndEffectorTeleopConfig, robot: RemoteRobot | None = None):
+        super().__init__(config, robot)
         self.config = config
         self.misc_keys_queue = Queue()
 
@@ -174,9 +181,8 @@ class KeyboardEndEffectorTeleop(KeyboardTeleop):
 
     def get_action(self) -> dict[str, Any]:
         if not self.is_connected:
-            raise DeviceNotConnectedError(
-                "KeyboardTeleop is not connected. You need to run `connect()` before `get_action()`."
-            )
+            logging.warning("KeyboardTeleop is not connected.")
+            return {}
 
         self._drain_pressed_keys()
 

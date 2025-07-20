@@ -90,6 +90,12 @@ tauro_common = ["proto/*.proto"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+exclude = [
+    "lib/*",
+    ".venv/*",
+    "build/*",
+    "dist/*",
+]
 
 [tool.ruff.lint]
 select = [
@@ -109,7 +115,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
-"*_pb2*.py" = ["F401", "F403", "E501"]  # Generated protobuf files
+"*_pb2*.py" = ["F401", "F403", "E501", "E402"]  # Generated protobuf files
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -23,9 +23,7 @@ def test_direct_sshkeyboard():
         print(f"Key released: '{key}' | Currently pressed: {pressed_keys}")
 
     try:
-        sshkeyboard.listen_keyboard(
-            on_press=on_press, on_release=on_release, until="esc"
-        )
+        sshkeyboard.listen_keyboard(on_press=on_press, on_release=on_release, until="esc")
     except Exception as e:
         print(f"\nError: {e}")
         print(

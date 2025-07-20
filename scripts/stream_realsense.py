@@ -158,14 +158,11 @@ class RealSenseStreamer:
             if frame is not None:
                 try:
                     # Encode frame as JPEG
-                    ret, buffer = cv2.imencode(
-                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
-                    )
+                    ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                     if ret:
                         frame_bytes = buffer.tobytes()
                         yield (
-                            b"--frame\r\n"
-                            b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+                            b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
                         )
                 except Exception as e:
                     logger.error(f"Error encoding color frame: {e}")
@@ -179,14 +176,11 @@ class RealSenseStreamer:
             if frame is not None:
                 try:
                     # Encode frame as JPEG
-                    ret, buffer = cv2.imencode(
-                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
-                    )
+                    ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                     if ret:
                         frame_bytes = buffer.tobytes()
                         yield (
-                            b"--frame\r\n"
-                            b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+                            b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
                         )
                 except Exception as e:
                     logger.error(f"Error encoding depth frame: {e}")
@@ -257,9 +251,7 @@ def status():
     """API endpoint for camera status"""
     return jsonify(
         {
-            "streaming": realsense_streamer.is_streaming
-            if realsense_streamer
-            else False,
+            "streaming": realsense_streamer.is_streaming if realsense_streamer else False,
             "resolution": f"{realsense_streamer.width}x{realsense_streamer.height}"
             if realsense_streamer
             else None,
@@ -275,15 +267,11 @@ def main():
     parser = argparse.ArgumentParser(
         description="RealSense Camera Streaming Server for Raspberry Pi"
     )
-    parser.add_argument(
-        "--width", "-w", type=int, default=640, help="Frame width (default: 640)"
-    )
+    parser.add_argument("--width", "-w", type=int, default=640, help="Frame width (default: 640)")
     parser.add_argument(
         "--height", "-ht", type=int, default=480, help="Frame height (default: 480)"
     )
-    parser.add_argument(
-        "--fps", "-f", type=int, default=30, help="Frames per second (default: 30)"
-    )
+    parser.add_argument("--fps", "-f", type=int, default=30, help="Frames per second (default: 30)")
     parser.add_argument(
         "--colormap",
         "-c",

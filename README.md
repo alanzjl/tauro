@@ -1,140 +1,234 @@
 # Tauro
 
-A Python package for robot control.
+A modular Python framework for robot control with distributed architecture, designed for flexible deployment scenarios where edge computing (hardware control) can be separated from inference (control algorithms).
 
-## Installation
+## Overview
+
+Tauro provides a clean separation between:
+- **Edge Computing**: Direct hardware control and real-time state management
+- **Inference**: Control algorithms, teleoperation, and high-level planning
+- **Common**: Shared protocol definitions and utilities
+
+This architecture enables:
+- Remote robot control over network connections
+- Separation of compute-intensive tasks from real-time control
+- Flexible deployment (single machine or distributed systems)
+- Low-latency streaming control
+
+## Quick Start
+
+### Installation
 
 ```bash
-pip install tauro
+# Clone the repository
+git clone <repository-url>
+cd tauro
+
+# Install uv package manager
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install
+uv venv
+source .venv/bin/activate
+uv pip install -e .
+
+# For development (includes linting and formatting tools)
+uv pip install -e ".[dev]"
+
+# Optional features
+uv pip install -e ".[feetech]"      # Feetech servo support
+uv pip install -e ".[visualization]" # Visualization tools
+uv pip install -e ".[realsense]"    # Intel RealSense support
 ```
 
-## Development Setup
+### Basic Usage
 
-This project uses uv for dependency management and ruff for code formatting and linting. To set up the development environment:
-
-1. Install uv (if you haven't already):
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-
-2. Create a virtual environment and install dependencies:
-   ```bash
-   uv venv
-   source .venv/bin/activate  # On Unix/macOS
-   # or
-   # .venv\Scripts\activate  # On Windows
-   
-   uv pip install -e ".[dev]"
-   ```
-
-3. Set up pre-commit hooks:
-   ```bash
-   pre-commit install
-   ```
-
-## Code Quality
-
-This project uses [ruff](https://github.com/astral-sh/ruff) for code formatting and linting. Ruff is configured to:
-- Format code (similar to black)
-- Sort imports (similar to isort)
-- Lint code (similar to flake8)
-
-You can run ruff manually with:
+1. **Start the robot server (on robot/edge device):**
 ```bash
-# Check your code
-ruff check .
-
-# Format your code
-ruff format .
+python -m tauro_edge.main --host 0.0.0.0 --port 50051 --log-level DEBUG
 ```
 
-The pre-commit hooks will automatically run these checks before each commit.
-
-## Usage
-
-### Basic Robot Control
-
+2. **Control the robot (from any device):**
 ```python
 from tauro_inference.client import RemoteRobot
 
-# Connect to a remote robot
-with RemoteRobot(
-    robot_id="robot_001",
-    robot_type="so100_follower", 
-    host="127.0.0.1",
-    port=50051
-) as robot:
-    # Get current robot state
-    obs = robot.get_observation()
-    
-    # Send joint commands
-    robot.send_action({"shoulder_pan.pos": 0.5})
-    
-    # Or send end effector commands (if enabled)
-    robot.send_action({
-        "end_effector": {
-            "delta_x": 0.01,  # Move 1cm in X
-            "delta_y": 0.0,
-            "delta_z": 0.0,
-            "gripper": 1.0
-        }
-    })
+# Connect to robot
+robot = RemoteRobot(address="localhost:50051")
+robot.connect()
+
+# Get robot state
+obs = robot.get_observation()
+print(f"Joint positions: {obs['joint_pos']}")
+
+# Send control commands
+action = {"joint_pos": [0.0, 0.5, -0.5, 0.0, 0.0, 0.0]}
+robot.send_action(action)
+
+robot.disconnect()
 ```
 
-### Robot Configuration
+3. **Teleoperate with keyboard:**
+```bash
+python scripts/keyboard_teleop.py --robot-address localhost:50051
+```
 
-Robot configurations are stored in `tauro_edge/configs/robot_ports.yaml`:
+## Architecture
+
+### Modules
+
+1. **tauro_edge** - Hardware control layer
+   - gRPC server for remote access
+   - Motor controllers (CyberGear, Feetech)
+   - Robot implementations (SO100, SO101)
+   - Real-time state management
+   - Calibration system
+
+2. **tauro_inference** - Control and algorithms layer
+   - Remote robot client
+   - Teleoperation interfaces
+   - Visualization tools
+   - Control algorithms
+
+3. **tauro_common** - Shared components
+   - Protocol definitions (protobuf)
+   - Common data types
+   - Configuration schemas
+   - Utility functions
+
+### Communication
+
+Tauro uses gRPC for efficient communication between edge and inference layers:
+- Supports both polling and streaming modes
+- Low-latency control for real-time applications
+- Automatic reconnection and error handling
+
+## Robot Configuration
+
+Configure robot connections in `tauro_edge/configs/robot_ports.yaml`:
 
 ```yaml
-robots:
-  robot_001:
-    port: "/dev/ttyACM0"
-    type: "so100_follower"
+so100:
+  motors:
+    can0:
+      - id: 127
+        model: "cybergear"
+        name: "base_yaw"
+      - id: 126
+        model: "cybergear"
+        name: "shoulder_pitch"
 ```
 
-### Testing Robot Control
+## Features
 
-A test script is provided to demonstrate reading robot pose and applying small deltas:
+### Supported Robots
+- **SO100**: 6-DOF arm with optional gripper
+- **SO101**: Similar architecture with different kinematics
+
+### Motor Support
+- CyberGear motors (CAN bus)
+- Feetech servos (serial)
+- Unified calibration system
+
+### Teleoperation
+- Keyboard control (no X display required)
+- Leader-follower mode
+- Configurable control schemes
+
+### Visualization
+- Camera streaming (OpenCV)
+- Intel RealSense depth cameras
+- Web-based interfaces
+
+## Development
+
+### Code Quality
 
 ```bash
-# Test all control modes (joint, end effector, gripper)
-python scripts/test_robot_control.py --robot-id robot_001 --host 127.0.0.1
+# Format code
+ruff format .
 
-# Test only joint control
-python scripts/test_robot_control.py --mode joint
+# Lint code
+ruff check .
 
-# Test only end effector control (requires enable_end_effector_control=True in robot config)
-python scripts/test_robot_control.py --mode end_effector
+# Run pre-commit hooks
+pre-commit install
+pre-commit run --all-files
 ```
 
-The test script demonstrates:
-- Reading current joint positions and applying small deltas
-- Moving the end effector in Cartesian space (X, Y, Z)
-- Opening and closing the gripper
+### Testing
 
-### Calibrating a Robot
+```bash
+# Run tests
+pytest
 
-To calibrate a robot before use:
-
-```python
-from tauro_inference.client import RemoteRobot
-
-with RemoteRobot(robot_id="robot_001", robot_type="so100_follower") as robot:
-    robot.calibrate()  # Interactive calibration process
+# Test specific module
+pytest tests/tauro_edge
 ```
 
-## Visualize Camera views
+### Common Tasks
 
-For single or dual regular camera(s), run
-```sh
-python scripts/stream_camera.py --width 848 --height 480 --fps 30 --camera1 0 --camera2 2 --port 5000
+**Calibrate motors:**
+```bash
+python scripts/calibrate_motors.py --robot so100
 ```
 
-For RealSense camera, run
-```sh
-python scripts/stream_realsense.py --width 848 --height 480 --fps 30 --colormap viridis --port 5000
+**Change motor IDs:**
+```bash
+python scripts/change_motor_id.py --old-id 1 --new-id 127 --port /dev/ttyUSB0
 ```
+
+**Stream camera:**
+```bash
+# Regular camera
+python scripts/stream_camera.py --camera1 0 --port 5000
+
+# RealSense camera
+python scripts/stream_realsense.py --port 5001
+```
+
+## Deployment
+
+### Single Machine
+Both edge and inference components run on the same device:
+```bash
+# Terminal 1: Start edge server
+python -m tauro_edge.server
+
+# Terminal 2: Run inference/control
+python scripts/keyboard_teleop.py
+```
+
+### Distributed System
+Edge server runs on robot, inference runs on separate compute:
+```bash
+# On robot (edge device)
+python -m tauro_edge.server --host 0.0.0.0 --robot-port 50051
+
+# On compute device
+python scripts/keyboard_teleop.py --robot-address robot.local:50051
+```
+
+## Troubleshooting
+
+### Connection Issues
+- Ensure firewall allows gRPC port (default: 50051)
+- Check network connectivity: `ping robot.local`
+- Verify server is running: `netstat -tlnp | grep 50051`
+
+### Motor Issues
+- Check motor connections and power
+- Verify motor IDs match configuration
+- Run calibration if movements are incorrect
+
+### Performance
+- Use streaming mode for low-latency control
+- Monitor network latency for remote setups
+- Consider local deployment for time-critical tasks
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+[Add license information]
+
+## Contributing
+
+[Add contributing guidelines]

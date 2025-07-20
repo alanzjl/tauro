@@ -53,8 +53,7 @@ class CameraStreamer:
                 return False
 
             logger.info(
-                f"{self.name} initialized successfully at "
-                f"{self.width}x{self.height}@{self.fps}fps"
+                f"{self.name} initialized successfully at {self.width}x{self.height}@{self.fps}fps"
             )
             return True
 
@@ -115,14 +114,11 @@ class CameraStreamer:
             if frame is not None:
                 try:
                     # Encode frame as JPEG
-                    ret, buffer = cv2.imencode(
-                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85]
-                    )
+                    ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                     if ret:
                         frame_bytes = buffer.tobytes()
                         yield (
-                            b"--frame\r\n"
-                            b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+                            b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
                         )
                 except Exception as e:
                     logger.error(f"Error encoding frame from {self.name}: {e}")
@@ -186,24 +182,16 @@ def status():
     return jsonify(
         {
             "camera1": {
-                "streaming": camera1_streamer.is_streaming
-                if camera1_streamer
-                else False,
-                "camera_index": camera1_streamer.camera_index
-                if camera1_streamer
-                else None,
+                "streaming": camera1_streamer.is_streaming if camera1_streamer else False,
+                "camera_index": camera1_streamer.camera_index if camera1_streamer else None,
                 "resolution": f"{camera1_streamer.width}x{camera1_streamer.height}"
                 if camera1_streamer
                 else None,
                 "fps": camera1_streamer.fps if camera1_streamer else None,
             },
             "camera2": {
-                "streaming": camera2_streamer.is_streaming
-                if camera2_streamer
-                else False,
-                "camera_index": camera2_streamer.camera_index
-                if camera2_streamer
-                else None,
+                "streaming": camera2_streamer.is_streaming if camera2_streamer else False,
+                "camera_index": camera2_streamer.camera_index if camera2_streamer else None,
                 "resolution": f"{camera2_streamer.width}x{camera2_streamer.height}"
                 if camera2_streamer
                 else None,
@@ -217,21 +205,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Dual USB Camera Streaming Server for Raspberry Pi"
     )
-    parser.add_argument(
-        "--camera1", "-c1", type=int, default=0, help="Camera 1 index (default: 0)"
-    )
-    parser.add_argument(
-        "--camera2", "-c2", type=int, default=1, help="Camera 2 index (default: 2)"
-    )
-    parser.add_argument(
-        "--width", "-w", type=int, default=640, help="Frame width (default: 640)"
-    )
+    parser.add_argument("--camera1", "-c1", type=int, default=0, help="Camera 1 index (default: 0)")
+    parser.add_argument("--camera2", "-c2", type=int, default=1, help="Camera 2 index (default: 2)")
+    parser.add_argument("--width", "-w", type=int, default=640, help="Frame width (default: 640)")
     parser.add_argument(
         "--height", "-ht", type=int, default=480, help="Frame height (default: 480)"
     )
-    parser.add_argument(
-        "--fps", "-f", type=int, default=30, help="Frames per second (default: 30)"
-    )
+    parser.add_argument("--fps", "-f", type=int, default=30, help="Frames per second (default: 30)")
     parser.add_argument(
         "--host", type=str, default="0.0.0.0", help="Host to bind to (default: 0.0.0.0)"
     )
@@ -301,9 +281,7 @@ def main():
         print("  - USB cameras are connected")
         print("  - Camera permissions are correct")
         print("  - Another application isn't using the cameras")
-        print(
-            "  - Try different camera indices with --camera1 and --camera2 parameters"
-        )
+        print("  - Try different camera indices with --camera1 and --camera2 parameters")
         print("  - Check available cameras with: ls /dev/video*")
 
 

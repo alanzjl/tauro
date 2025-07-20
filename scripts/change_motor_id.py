@@ -21,8 +21,6 @@ if __name__ == "__main__":
             )
 
         # Create the motor controller
-        motor = CyberGearMotor(
-            motor_id=args.old_id, send_message=send_message, verbose=True
-        )
+        motor = CyberGearMotor(motor_id=args.old_id, send_message=send_message, verbose=True)
 
         motor.change_motor_id(args.new_id)

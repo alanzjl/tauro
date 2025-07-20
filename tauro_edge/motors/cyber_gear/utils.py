@@ -1,5 +1,4 @@
 import struct
-from typing import Union
 
 from constants import DataType
 
@@ -54,7 +53,7 @@ def extract_type(data: bytearray, to_type: DataType) -> int:
 def encode_to_bytes(
     value: int,
     from_type: DataType,
-    range: Union[tuple[int, int], None] = None,
+    range: tuple[int, int] | None = None,
 ) -> bytearray:
     # Clamp value to range
     if range is not None:

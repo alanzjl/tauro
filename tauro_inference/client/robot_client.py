@@ -4,7 +4,6 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Optional
 
 import grpc
 from google.protobuf import empty_pb2
@@ -33,11 +32,11 @@ class RobotClient:
         self.host = host
         self.port = port
         self.address = f"{host}:{port}"
-        self.channel: Optional[grpc.Channel] = None
-        self.stub: Optional[robot_service_pb2_grpc.RobotControlServiceStub] = None
-        self._stream_task: Optional[asyncio.Task] = None
-        self._command_queue: Optional[asyncio.Queue] = None
-        self._state_queue: Optional[asyncio.Queue] = None
+        self.channel: grpc.Channel | None = None
+        self.stub: robot_service_pb2_grpc.RobotControlServiceStub | None = None
+        self._stream_task: asyncio.Task | None = None
+        self._command_queue: asyncio.Queue | None = None
+        self._state_queue: asyncio.Queue | None = None
 
     def connect_to_server(self):
         """Establish connection to the gRPC server."""
@@ -63,7 +62,7 @@ class RobotClient:
             self.channel.close()
             self.channel = None
             self.stub = None
-            raise ConnectionError(f"Failed to connect to server: {e}")
+            raise ConnectionError(f"Failed to connect to server: {e}") from e
 
     def disconnect_from_server(self):
         """Close connection to the gRPC server."""
@@ -73,7 +72,7 @@ class RobotClient:
             self.stub = None
             logger.info("Disconnected from server")
 
-    def connect_robot(self, robot_id: str, robot_type: str, config: Optional[dict] = None) -> bool:
+    def connect_robot(self, robot_id: str, robot_type: str, config: dict | None = None) -> bool:
         """Connect to a specific robot through the server."""
         if self.stub is None:
             raise RuntimeError("Not connected to server")
@@ -113,7 +112,7 @@ class RobotClient:
             logger.error(f"gRPC error disconnecting from robot: {e}")
             return False
 
-    def calibrate_robot(self, robot_id: str) -> Optional[dict[str, MotorCalibration]]:
+    def calibrate_robot(self, robot_id: str) -> dict[str, MotorCalibration] | None:
         """Calibrate a robot and return calibration data."""
         if self.stub is None:
             raise RuntimeError("Not connected to server")
@@ -136,7 +135,7 @@ class RobotClient:
             logger.error(f"gRPC error calibrating robot: {e}")
             return None
 
-    def get_robot_state(self, robot_id: str) -> Optional[RobotState]:
+    def get_robot_state(self, robot_id: str) -> RobotState | None:
         """Get current state of a robot."""
         if self.stub is None:
             raise RuntimeError("Not connected to server")
@@ -241,7 +240,7 @@ class RobotClient:
             raise RuntimeError("Streaming not active")
         await self._command_queue.put(command)
 
-    async def get_streaming_state(self) -> Optional[RobotState]:
+    async def get_streaming_state(self) -> RobotState | None:
         """Get the latest state in streaming mode."""
         if self._state_queue is None:
             raise RuntimeError("Streaming not active")
@@ -310,8 +309,8 @@ class AsyncRobotClient:
         self.host = host
         self.port = port
         self.address = f"{host}:{port}"
-        self.channel: Optional[grpc.aio.Channel] = None
-        self.stub: Optional[robot_service_pb2_grpc.RobotControlServiceStub] = None
+        self.channel: grpc.aio.Channel | None = None
+        self.stub: robot_service_pb2_grpc.RobotControlServiceStub | None = None
 
     async def connect_to_server(self):
         """Establish connection to the gRPC server."""
@@ -337,7 +336,7 @@ class AsyncRobotClient:
             await self.channel.close()
             self.channel = None
             self.stub = None
-            raise ConnectionError(f"Failed to connect to server: {e}")
+            raise ConnectionError(f"Failed to connect to server: {e}") from e
 
     async def disconnect_from_server(self):
         """Close connection to the gRPC server."""
@@ -348,7 +347,7 @@ class AsyncRobotClient:
             logger.info("Disconnected from server")
 
     async def connect_robot(
-        self, robot_id: str, robot_type: str, config: Optional[dict] = None
+        self, robot_id: str, robot_type: str, config: dict | None = None
     ) -> bool:
         """Connect to a specific robot through the server."""
         if self.stub is None:
@@ -389,7 +388,7 @@ class AsyncRobotClient:
             logger.error(f"gRPC error disconnecting from robot: {e}")
             return False
 
-    async def calibrate_robot(self, robot_id: str) -> Optional[dict[str, MotorCalibration]]:
+    async def calibrate_robot(self, robot_id: str) -> dict[str, MotorCalibration] | None:
         """Calibrate a robot and return calibration data."""
         if self.stub is None:
             raise RuntimeError("Not connected to server")
@@ -412,7 +411,7 @@ class AsyncRobotClient:
             logger.error(f"gRPC error calibrating robot: {e}")
             return None
 
-    async def get_robot_state(self, robot_id: str) -> Optional[RobotState]:
+    async def get_robot_state(self, robot_id: str) -> RobotState | None:
         """Get current state of a robot."""
         if self.stub is None:
             raise RuntimeError("Not connected to server")

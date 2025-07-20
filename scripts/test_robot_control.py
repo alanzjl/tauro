@@ -47,32 +47,44 @@ def test_joint_control(robot):
             time.sleep(0.5)
 
 
-def test_end_effector_control(robot):
+def test_end_effector_control(robot, control_gripper=True):
     """Test end effector space control by applying small Cartesian deltas."""
     print("\n=== Testing End Effector Space Control ===")
+    if not control_gripper:
+        print("Note: Gripper control disabled to avoid overload errors")
 
     # Get current observation
     obs = robot.get_observation()
 
     # Check if end effector state is available
-    if "end_effector.pos" in obs:
-        ee_pos = obs["end_effector.pos"]
+    if "end_effector" in obs and "position" in obs["end_effector"]:
+        ee_pos = obs["end_effector"]["position"]
         print(
             f"Current end effector position: x={ee_pos[0]:.3f}, y={ee_pos[1]:.3f}, z={ee_pos[2]:.3f}"
         )
     else:
         print("End effector state not available.")
+        print(f"Available observation keys: {list(obs.keys())}")
+        if "end_effector" in obs:
+            print(f"End effector keys: {list(obs['end_effector'].keys())}")
         return
 
     # Define test movements
+    # Note: gripper value of 1.0 means "maintain current position"
+    # Use 0.0 to close, 2.0 to open relative to current position
     movements = [
-        {"delta_x": 0.02, "delta_y": 0.0, "delta_z": 0.0, "gripper": 1.0},  # Move 2cm in +X
-        {"delta_x": -0.02, "delta_y": 0.0, "delta_z": 0.0, "gripper": 1.0},  # Move back
-        {"delta_x": 0.0, "delta_y": 0.02, "delta_z": 0.0, "gripper": 1.0},  # Move 2cm in +Y
-        {"delta_x": 0.0, "delta_y": -0.02, "delta_z": 0.0, "gripper": 1.0},  # Move back
-        {"delta_x": 0.0, "delta_y": 0.0, "delta_z": 0.02, "gripper": 1.0},  # Move 2cm in +Z
-        {"delta_x": 0.0, "delta_y": 0.0, "delta_z": -0.02, "gripper": 1.0},  # Move back
+        {"delta_x": 0.02, "delta_y": 0.0, "delta_z": 0.0},  # Move 2cm in +X
+        {"delta_x": -0.02, "delta_y": 0.0, "delta_z": 0.0},  # Move back
+        {"delta_x": 0.0, "delta_y": 0.02, "delta_z": 0.0},  # Move 2cm in +Y
+        {"delta_x": 0.0, "delta_y": -0.02, "delta_z": 0.0},  # Move back
+        {"delta_x": 0.0, "delta_y": 0.0, "delta_z": 0.02},  # Move 2cm in +Z
+        {"delta_x": 0.0, "delta_y": 0.0, "delta_z": -0.02},  # Move back
     ]
+
+    # Add gripper control if enabled
+    if control_gripper:
+        for movement in movements:
+            movement["gripper"] = 1.0
 
     for i, movement in enumerate(movements):
         direction = []
@@ -92,10 +104,15 @@ def test_end_effector_control(robot):
         time.sleep(1.0)  # Wait for movement to complete
 
         # Read new position
-        obs = robot.get_observation()
-        if "end_effector.pos" in obs:
-            ee_pos = obs["end_effector.pos"]
-            print(f"New position: x={ee_pos[0]:.3f}, y={ee_pos[1]:.3f}, z={ee_pos[2]:.3f}")
+        try:
+            obs = robot.get_observation()
+            if "end_effector" in obs and "position" in obs["end_effector"]:
+                ee_pos = obs["end_effector"]["position"]
+                print(f"New position: x={ee_pos[0]:.3f}, y={ee_pos[1]:.3f}, z={ee_pos[2]:.3f}")
+        except Exception as e:
+            print(f"Error reading position after movement: {e}")
+            print("Note: Motor overload errors may occur if the gripper is physically obstructed")
+            break
 
 
 def test_gripper_control(robot):
@@ -139,6 +156,11 @@ def main():
         default="all",
         help="Control mode to test",
     )
+    parser.add_argument(
+        "--no-gripper",
+        action="store_true",
+        help="Disable gripper control in end effector mode to avoid overload errors",
+    )
     args = parser.parse_args()
 
     # Connect to robot
@@ -149,12 +171,16 @@ def main():
     ) as robot:
         print("Connected successfully!")
 
+        # Note: The robot should automatically load calibration from cache if it exists
+        # The calibrate() method will run the full calibration process even if cached
+        # calibration exists, so we skip calling it here to use the cached calibration
+
         # Run requested tests
         if args.mode == "joint" or args.mode == "all":
             test_joint_control(robot)
 
         if args.mode == "end_effector" or args.mode == "all":
-            test_end_effector_control(robot)
+            test_end_effector_control(robot, control_gripper=not args.no_gripper)
 
         if args.mode == "gripper" or args.mode == "all":
             test_gripper_control(robot)

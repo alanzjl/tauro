@@ -5,7 +5,6 @@ import logging
 import threading
 import time
 from queue import Queue
-from typing import Optional
 
 import numpy as np
 from sshkeyboard import listen_keyboard, stop_listening
@@ -40,7 +39,7 @@ class RemoteKeyboardTeleoperator:
         self._streaming = False
         self._stop_event = threading.Event()
         self._command_queue = Queue()
-        self._stream_thread: Optional[threading.Thread] = None
+        self._stream_thread: threading.Thread | None = None
 
         # Control state
         self.motor_names = []

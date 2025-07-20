@@ -49,7 +49,7 @@ def simple_control_example(host: str, port: int):
             )
 
             robot.send_action({"action": action})
-            print(f"Sent action {i+1}: {action}")
+            print(f"Sent action {i + 1}: {action}")
             time.sleep(0.1)
 
         print("Done!")
@@ -86,7 +86,7 @@ async def streaming_control_example(host: str, port: int):
             frequency = 0.5  # Hz
             amplitude = 0.3  # normalized units
 
-            for i in range(100):  # Send 100 commands
+            for _ in range(100):  # Send 100 commands
                 t = time.time() - start_time
 
                 # Generate sine wave for each motor
@@ -200,7 +200,7 @@ def health_monitoring_example(host: str, port: int):
                     # Check joint temperatures
                     temps = [j.temperature for j in state.joints.values()]
                     avg_temp = sum(temps) / len(temps) if temps else 0
-                    print(f"Time {i+1}s: Average temperature: {avg_temp:.1f}°C")
+                    print(f"Time {i + 1}s: Average temperature: {avg_temp:.1f}°C")
 
                 # Check overall health
                 health = client.health_check()

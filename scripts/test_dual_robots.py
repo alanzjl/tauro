@@ -71,6 +71,9 @@ class DualRobotController:
         # Get initial states
         obs1, obs2 = self.get_states()
 
+        # Debug: print observation keys
+        print("Robot1 observation keys:", list(obs1.keys())[:10], "...")
+
         # Store initial positions
         initial_positions = {}
         for key in obs1.keys():
@@ -91,6 +94,11 @@ class DualRobotController:
 
         for motor_name, delta in movements:
             print(f"\nMoving {motor_name} by {delta:+.1f} degrees...")
+
+            # Check if motor exists in initial positions
+            if motor_name not in initial_positions:
+                print(f"  Skipping {motor_name} - not found in robot configuration")
+                continue
 
             # Calculate new positions
             new_pos1 = initial_positions[motor_name] + delta
@@ -147,7 +155,7 @@ class DualRobotController:
             action2 = {"shoulder_pan.pos": pos2}
 
             self.send_actions(action1, action2)
-            print(f"  Step {i+1}/10: Robot1={pos1:.1f}, Robot2={pos2:.1f}")
+            print(f"  Step {i + 1}/10: Robot1={pos1:.1f}, Robot2={pos2:.1f}")
 
             time.sleep(0.3)
 
