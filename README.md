@@ -192,7 +192,7 @@ python scripts/stream_realsense.py --port 5001
 Both edge and inference components run on the same device:
 ```bash
 # Terminal 1: Start edge server
-python -m tauro_edge.server
+python -m tauro_edge.main
 
 # Terminal 2: Run inference/control
 python scripts/keyboard_teleop.py
@@ -202,7 +202,7 @@ python scripts/keyboard_teleop.py
 Edge server runs on robot, inference runs on separate compute:
 ```bash
 # On robot (edge device)
-python -m tauro_edge.server --host 0.0.0.0 --robot-port 50051
+python -m tauro_edge.main --host 0.0.0.0 --robot-port 50051
 
 # On compute device
 python scripts/keyboard_teleop.py --robot-address robot.local:50051

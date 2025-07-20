@@ -53,6 +53,9 @@ uv pip install -e ".[dev]"
 # Setup pre-commit hooks
 pre-commit install
 
+# Download robot URDF model (required for IK)
+python scripts/download_urdf.py
+
 # Compile protocol buffers (if modified)
 cd tauro_common/proto
 ./compile_protos.sh

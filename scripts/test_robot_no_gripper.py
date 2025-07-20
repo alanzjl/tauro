@@ -99,29 +99,20 @@ def test_keyboard_control_no_gripper():
             if action and any(action.get(k, 0) != 0 for k in ["delta_x", "delta_y", "delta_z"]):
                 print(f"\nAction: {action}")
 
-                # Convert EE deltas to joint commands (simple mapping)
-                obs = robot.get_observation()
-                joint_commands = {}
+                # Send end-effector action directly
+                # The robot will handle IK internally
+                ee_command = {
+                    "end_effector": {
+                        "delta_x": action.get("delta_x", 0),
+                        "delta_y": action.get("delta_y", 0),
+                        "delta_z": action.get("delta_z", 0),
+                        "gripper": 1.0,  # Maintain gripper position
+                    }
+                }
 
-                # X motion -> shoulder_pan
-                if action.get("delta_x", 0) != 0:
-                    current = obs.get("shoulder_pan.pos", 0)
-                    joint_commands["shoulder_pan.pos"] = current + action["delta_x"] * 500
-
-                # Y motion -> elbow_flex
-                if action.get("delta_y", 0) != 0:
-                    current = obs.get("elbow_flex.pos", 0)
-                    joint_commands["elbow_flex.pos"] = current + action["delta_y"] * 500
-
-                # Z motion -> shoulder_lift
-                if action.get("delta_z", 0) != 0:
-                    current = obs.get("shoulder_lift.pos", 0)
-                    joint_commands["shoulder_lift.pos"] = current - action["delta_z"] * 500
-
-                if joint_commands:
-                    print(f"Sending joint commands: {joint_commands}")
-                    success = robot.send_action(joint_commands)
-                    print(f"Command sent: {'✓' if success else '✗'}")
+                print(f"Sending EE command: {ee_command['end_effector']}")
+                success = robot.send_action(ee_command)
+                print(f"Command sent: {'✓' if success else '✗'}")
 
             time.sleep(0.05)
 

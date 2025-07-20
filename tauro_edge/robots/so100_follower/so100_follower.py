@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 
 from tauro_common.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
-from tauro_common.model.kinematics import RobotKinematics
+from tauro_common.kinematics.mink_kinematics import MinkKinematics
 from tauro_edge.motors import Motor, MotorCalibration, MotorNormMode
 from tauro_edge.motors.feetech import (
     FeetechMotorsBus,
@@ -63,10 +63,11 @@ class SO100Follower(Robot):
         )
 
         # Initialize kinematics for end effector control
-        self.kinematics = RobotKinematics(robot_type="so_new_calibration")
+        self.kinematics = MinkKinematics()
+        self.ee_frame = "Wrist_Pitch_Roll"  # MuJoCo body name
         self.current_ee_pos = None
         self.current_joint_pos = None
-        self.ee_frame = "gripper_tip"
+        logger.info("Using Mink-based inverse kinematics")
 
     @property
     def motor_configs(self) -> dict[str, Any]:
@@ -217,7 +218,10 @@ class SO100Follower(Robot):
         }
 
         # Calculate end effector state
-        joint_positions = np.array([position_dict[name] for name in self.bus.motors])
+        motor_positions = [
+            position_dict[name] for name in list(self.bus.motors.keys())[:-1]
+        ]  # Exclude gripper
+        joint_positions = np.array(motor_positions)
         ee_pos = self.kinematics.forward_kinematics(joint_positions, frame=self.ee_frame)
 
         # Build end effector observation dictionary
@@ -226,8 +230,9 @@ class SO100Follower(Robot):
             "orientation": ee_pos[:3, :3].flatten(),  # 3x3 rotation matrix as flat array
         }
 
-        # Update current state for end effector control
-        self.current_joint_pos = joint_positions
+        # Update current state for end effector control (include gripper)
+        all_joint_positions = [position_dict[name] for name in self.bus.motors]
+        self.current_joint_pos = np.array(all_joint_positions)
         self.current_ee_pos = ee_pos
 
         # Build final observation dictionary
@@ -282,6 +287,7 @@ class SO100Follower(Robot):
 
     def _send_end_effector_action(self, ee_action: dict[str, Any] | np.ndarray) -> dict[str, Any]:
         """Send end effector space action."""
+        logger.debug(f"Received end effector action: {ee_action}")
         # Convert action to numpy array if dict
         if isinstance(ee_action, dict):
             delta_ee = np.array(
@@ -307,12 +313,21 @@ class SO100Follower(Robot):
         # Initialize current state if needed
         if self.current_joint_pos is None:
             current_joint_pos = self.bus.sync_read("Present_Position")
-            self.current_joint_pos = np.array([current_joint_pos[name] for name in self.bus.motors])
+            logger.debug(f"Read joint positions: {current_joint_pos}")
+            logger.debug(f"Motor names: {list(self.bus.motors.keys())}")
+            self.current_joint_pos = np.array(
+                [current_joint_pos[name] for name in self.bus.motors], dtype=np.float32
+            )
+            logger.debug(f"Current joint pos array shape: {self.current_joint_pos.shape}")
 
         if self.current_ee_pos is None:
             self.current_ee_pos = self.kinematics.forward_kinematics(
-                self.current_joint_pos, frame=self.ee_frame
+                self.current_joint_pos[:-1],
+                frame=self.ee_frame,  # Exclude gripper
             )
+
+        logger.debug(f"Current EE position: {self.current_ee_pos[:3, 3]}")
+        logger.debug(f"Delta EE (after scaling): {delta_ee}")
 
         # Calculate desired end effector position
         desired_ee_pos = np.eye(4)
@@ -327,10 +342,23 @@ class SO100Follower(Robot):
                 self.config.end_effector_bounds["max"],
             )
 
-        # Compute inverse kinematics
-        target_joint_values = self.kinematics.ik(
-            self.current_joint_pos, desired_ee_pos, position_only=True, frame=self.ee_frame
+        # Compute inverse kinematics using mink
+        logger.debug(
+            f"Current joint pos (excluding gripper): {self.current_joint_pos[:-1] if self.current_joint_pos is not None else None}"
         )
+        logger.debug(f"Target EE position: {desired_ee_pos[:3, 3]}")
+
+        target_joint_values = self.kinematics.solve_ik(
+            target_position=desired_ee_pos[:3, 3],
+            current_joint_pos_deg=self.current_joint_pos[:-1]
+            if self.current_joint_pos is not None
+            else None,
+            frame=self.ee_frame,
+            position_weight=1.0,
+            orientation_weight=0.0,  # Position only for now
+        )
+
+        logger.debug(f"IK solution: {target_joint_values}")
 
         target_joint_values = np.clip(target_joint_values, -180.0, 180.0)
 
@@ -347,9 +375,11 @@ class SO100Follower(Robot):
             self.config.max_gripper_pos,
         )
 
-        # Update current state
-        self.current_ee_pos = desired_ee_pos.copy()
-        self.current_joint_pos = target_joint_values.copy()
+        # Don't update current_ee_pos yet - let get_observation do it
+        # Only update joint positions for tracking
+        if self.current_joint_pos is None:
+            self.current_joint_pos = np.zeros(len(self.bus.motors))
+        self.current_joint_pos[:-1] = target_joint_values
         self.current_joint_pos[-1] = joint_action["gripper.pos"]
 
         # Send joint action

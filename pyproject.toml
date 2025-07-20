@@ -36,6 +36,11 @@ dependencies = [
     
     # Inference dependencies
     "sshkeyboard>=2.3.1",
+    
+    # Kinematics
+    "mink>=0.0.4",
+    "pin",  # Pinocchio, required by mink
+    "scipy",  # For rotation conversions
 ]
 
 [project.optional-dependencies]

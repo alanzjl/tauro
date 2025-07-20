@@ -86,30 +86,18 @@ def test_keyboard_teleop_simple(robot_address: str, robot_id: str, robot_type: s
                     if action and any(
                         v != 0 for v in action.values() if isinstance(v, int | float)
                     ):
-                        # Simple mapping: just move joints based on deltas
-                        joint_commands = {}
+                        # Send end-effector command directly
+                        ee_command = {"end_effector": action}
 
-                        if action.get("delta_x", 0) != 0:
-                            # X motion -> shoulder_pan
-                            current = obs.get("shoulder_pan.pos", 0)
-                            joint_commands["shoulder_pan.pos"] = current + action["delta_x"] * 50
+                        print(
+                            f"\rSending EE: dx={action.get('delta_x', 0):.3f}, dy={action.get('delta_y', 0):.3f}, dz={action.get('delta_z', 0):.3f}",
+                            end="",
+                            flush=True,
+                        )
+                        robot.send_action(ee_command)
 
-                        if action.get("delta_y", 0) != 0:
-                            # Y motion -> elbow_flex
-                            current = obs.get("elbow_flex.pos", 0)
-                            joint_commands["elbow_flex.pos"] = current + action["delta_y"] * 50
-
-                        if action.get("delta_z", 0) != 0:
-                            # Z motion -> shoulder_lift
-                            current = obs.get("shoulder_lift.pos", 0)
-                            joint_commands["shoulder_lift.pos"] = current - action["delta_z"] * 50
-
-                        if joint_commands:
-                            print(f"\rSending: {joint_commands}", end="", flush=True)
-                            robot.send_action(joint_commands)
-
-                            # Update observation
-                            obs = robot.get_observation()
+                        # Update observation
+                        obs = robot.get_observation()
 
                     time.sleep(0.05)
 

@@ -89,53 +89,16 @@ def test_ee_space_teleop(robot_address: str, robot_id: str, robot_type: str):
             action = teleop.get_action()
 
             if action:
-                # Convert EE deltas to joint commands
-                # This is a simplified version - in practice you'd use proper IK
-                joint_action = {}
+                # Send end-effector action directly to robot
+                # The robot handles IK internally using mink
+                ee_command = {"end_effector": action}
 
-                if "delta_x" in action and action["delta_x"] != 0:
-                    # X motion affects shoulder_pan
-                    current_obs = robot.get_observation()
-                    if "shoulder_pan.pos" in current_obs:
-                        joint_action["shoulder_pan.pos"] = (
-                            current_obs["shoulder_pan.pos"] + action["delta_x"] * 100
-                        )
-
-                if "delta_y" in action and action["delta_y"] != 0:
-                    # Y motion affects shoulder_lift and elbow
-                    current_obs = robot.get_observation()
-                    if "shoulder_lift.pos" in current_obs:
-                        joint_action["shoulder_lift.pos"] = (
-                            current_obs["shoulder_lift.pos"] - action["delta_y"] * 100
-                        )
-                    if "elbow_flex.pos" in current_obs:
-                        joint_action["elbow_flex.pos"] = (
-                            current_obs["elbow_flex.pos"] + action["delta_y"] * 50
-                        )
-
-                if "delta_z" in action and action["delta_z"] != 0:
-                    # Z motion affects shoulder_lift and elbow
-                    current_obs = robot.get_observation()
-                    if "shoulder_lift.pos" in current_obs:
-                        joint_action["shoulder_lift.pos"] = (
-                            current_obs["shoulder_lift.pos"] - action["delta_z"] * 50
-                        )
-                    if "elbow_flex.pos" in current_obs:
-                        joint_action["elbow_flex.pos"] = (
-                            current_obs["elbow_flex.pos"] - action["delta_z"] * 100
-                        )
-
-                if "gripper" in action:
-                    # Gripper control: 0=close, 1=stay, 2=open
-                    if action["gripper"] == 0:
-                        joint_action["gripper.pos"] = -50.0  # Close
-                    elif action["gripper"] == 2:
-                        joint_action["gripper.pos"] = 50.0  # Open
-
-                # Send joint commands
-                if joint_action:
-                    robot.send_action(joint_action)
-                    print(f"\rAction sent: {joint_action}", end="", flush=True)
+                robot.send_action(ee_command)
+                print(
+                    f"\rEE Action sent: dx={action.get('delta_x', 0):.3f}, dy={action.get('delta_y', 0):.3f}, dz={action.get('delta_z', 0):.3f}",
+                    end="",
+                    flush=True,
+                )
 
             time.sleep(0.05)  # Small delay
 
