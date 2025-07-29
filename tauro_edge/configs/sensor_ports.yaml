@@ -1,0 +1,17 @@
+# Sensor device mapping configuration
+# Maps logical sensor names to physical device IDs and configurations
+
+cameras:
+  top:
+    device_id: "/dev/video6"
+    type: "usb"
+    format: "MJPEG"
+    resolution: "640x480"
+    fps: 30
+  depth:
+    device_id: "realsense://0"
+    type: "realsense"
+    serial: ""  # Empty means first available device
+    streams:
+      - "color"
+      - "depth"
