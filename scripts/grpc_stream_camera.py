@@ -6,6 +6,7 @@ Streams camera feeds from the gRPC camera service through Flask web interface
 
 import argparse
 import logging
+import os
 import threading
 import time
 import zlib
@@ -13,7 +14,7 @@ import zlib
 import cv2
 import grpc
 import numpy as np
-from flask import Flask, Response, jsonify, render_template_string
+from flask import Flask, Response, jsonify, render_template
 from google.protobuf import empty_pb2
 
 from tauro_common.proto import camera_service_pb2, camera_service_pb2_grpc
@@ -22,7 +23,11 @@ from tauro_common.proto import camera_service_pb2, camera_service_pb2_grpc
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+template_dir = os.path.join(script_dir, "static")
+
+app = Flask(__name__, template_folder=template_dir)
 
 
 class GRPCCameraStreamer:
@@ -301,160 +306,6 @@ class GRPCCameraStreamer:
 # Global camera streamers
 camera_streamers = {}
 
-# HTML template
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>gRPC Camera Streaming</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-        }
-
-        h1 {
-            text-align: center;
-            color: #ffffff;
-        }
-
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-        }
-
-        .info {
-            background-color: #2a2a2a;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .camera-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            justify-content: center;
-        }
-
-        .camera-container {
-            background-color: #2a2a2a;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            text-align: center;
-        }
-
-        .camera-container h2 {
-            margin-top: 0;
-            color: #4CAF50;
-        }
-
-        .rgbd-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .stream-container {
-            text-align: center;
-        }
-
-        .stream-container h3 {
-            margin: 5px 0;
-            font-size: 14px;
-            color: #999;
-        }
-
-        .camera-stream {
-            border: 2px solid #444;
-            border-radius: 4px;
-            max-width: 100%;
-            height: auto;
-        }
-
-        .status {
-            margin-top: 10px;
-            padding: 5px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .status.online { background-color: #4CAF50; color: white; }
-        .status.offline { background-color: #f44336; color: white; }
-    </style>
-    <script>
-        function updateStatus() {
-            fetch('/status')
-                .then(response => response.json())
-                .then(data => {
-                    for (const [camera_id, info] of Object.entries(data)) {
-                        const statusElement = document.getElementById(`status-${camera_id}`);
-                        if (statusElement) {
-                            if (info.streaming) {
-                                statusElement.className = 'status online';
-                                let statusText = `Online - ${info.resolution} @ ${info.fps} FPS`;
-                                if (info.is_rgbd) {
-                                    statusText += ' (RGB-D)';
-                                }
-                                statusElement.textContent = statusText;
-                            } else {
-                                statusElement.className = 'status offline';
-                                statusElement.textContent = 'Offline';
-                            }
-                        }
-                    }
-                });
-        }
-
-        setInterval(updateStatus, 2000);
-        window.onload = updateStatus;
-    </script>
-</head>
-<body>
-    <div class="container">
-        <h1>🎥 gRPC Camera Streaming</h1>
-
-        <div class="info">
-            <strong>Service:</strong> {{ grpc_address }} |
-            <strong>Resolution:</strong> {{ width }}x{{ height }} |
-            <strong>FPS:</strong> {{ fps }}
-        </div>
-
-        <div class="camera-grid">
-            {% for camera_id, is_rgbd in camera_info %}
-            <div class="camera-container">
-                <h2>{{ camera_id }}</h2>
-                {% if is_rgbd %}
-                <div class="rgbd-container">
-                    <div class="stream-container">
-                        <h3>Color</h3>
-                        <img src="/video_feed/{{ camera_id }}/color" class="camera-stream"
-                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMzMzIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+Tm8gU2lnbmFsPC90ZXh0Pjwvc3ZnPg=='">
-                    </div>
-                    <div class="stream-container">
-                        <h3>Depth</h3>
-                        <img src="/video_feed/{{ camera_id }}/depth" class="camera-stream"
-                             onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMzMzIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+Tm8gU2lnbmFsPC90ZXh0Pjwvc3ZnPg=='">
-                    </div>
-                </div>
-                {% else %}
-                <img src="/video_feed/{{ camera_id }}" class="camera-stream"
-                     onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMzMzIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+Tm8gU2lnbmFsPC90ZXh0Pjwvc3ZnPg=='">
-                {% endif %}
-                <div id="status-{{ camera_id }}" class="status offline">Connecting...</div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</body>
-</html>
-"""
-
 
 @app.route("/")
 def index():
@@ -464,8 +315,8 @@ def index():
     for camera_id, streamer in camera_streamers.items():
         camera_info.append((camera_id, streamer.is_rgbd))
 
-    return render_template_string(
-        HTML_TEMPLATE,
+    return render_template(
+        "grpc_stream_camera.html",
         grpc_address=list(camera_streamers.values())[0].grpc_address if camera_streamers else "N/A",
         width=list(camera_streamers.values())[0].width if camera_streamers else 640,
         height=list(camera_streamers.values())[0].height if camera_streamers else 480,

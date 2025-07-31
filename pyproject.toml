@@ -29,6 +29,7 @@ dependencies = [
     "protobuf>=4.0.0",
     "draccus>=0.8.0",
     "pillow",
+    "opencv-python",
     
     # Edge dependencies
     "pyserial>=3.5",
