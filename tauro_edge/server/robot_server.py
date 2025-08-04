@@ -276,9 +276,8 @@ class RobotControlServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
             if request.HasField("joint_command"):
                 # Joint space command
                 joint_cmd = request.joint_command
-                action = {}
-                for motor_name, position in joint_cmd.positions.items():
-                    action[f"{motor_name}.pos"] = position
+                # TODO: create a util function to convert the joint command to a dict
+                action = {"joints": {"position": dict(joint_cmd.positions)}}
             elif request.HasField("end_effector_command"):
                 # End effector space command
                 ee_cmd = request.end_effector_command

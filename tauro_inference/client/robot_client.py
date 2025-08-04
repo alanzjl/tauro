@@ -150,7 +150,29 @@ class RobotClient:
             return None
 
     def send_action(self, robot_id: str, action: dict) -> bool:
-        """Send a single action command to a robot."""
+        """
+        Send a single action command to a robot.
+        Supported formats:
+        {
+            "joints": {
+                "position": {
+                    "jnt1": 0.0,
+                    "jnt2": 0.0,
+                    "jnt3": 0.0,
+                    ...
+                }
+            }
+        }
+        or
+        {
+            "end_effector": {
+                "delta_x": 0.0,
+                "delta_y": 0.0,
+                "delta_z": 0.0,
+                "gripper": 0.0,
+                "delta_orientation": [0.0, 0.0, 0.0],
+            }
+        """
         if self.stub is None:
             raise RuntimeError("Not connected to server")
 
@@ -161,15 +183,10 @@ class RobotClient:
         )
 
         # Check if it's a joint command or end effector command
-        if "positions" in action or all(k.endswith(".pos") for k in action.keys()):
+        if "joints" in action:
             # Joint command
             joint_cmd = robot_service_pb2.JointCommand()
-            if "positions" in action:
-                joint_cmd.positions.update(action["positions"])
-            else:
-                # Convert motor_name.pos format to positions dict
-                positions = {k.removesuffix(".pos"): v for k, v in action.items()}
-                joint_cmd.positions.update(positions)
+            joint_cmd.positions.update(action["joints"]["position"])
             control_cmd.joint_command.CopyFrom(joint_cmd)
         elif "end_effector" in action:
             # End effector command

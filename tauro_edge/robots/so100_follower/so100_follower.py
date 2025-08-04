@@ -270,9 +270,7 @@ class SO100Follower(Robot):
             return self._send_end_effector_action(action["end_effector"])
 
         # Otherwise, process as joint action
-        goal_pos = {
-            key.removesuffix(".pos"): val for key, val in action.items() if key.endswith(".pos")
-        }
+        goal_pos = action["joints"]["position"]
 
         # Cap goal position when too far away from present position.
         # /!\ Slower fps expected due to reading from the follower.
@@ -283,7 +281,6 @@ class SO100Follower(Robot):
 
         # Send goal position to the arm
         self.bus.sync_write("Goal_Position", goal_pos)
-        return {f"{motor}.pos": val for motor, val in goal_pos.items()}
 
     def _send_end_effector_action(self, ee_action: dict[str, Any] | np.ndarray) -> dict[str, Any]:
         """Send end effector space action."""
