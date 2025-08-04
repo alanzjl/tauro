@@ -129,11 +129,11 @@ The MuJoCo-based simulator provides a drop-in replacement for real hardware, ena
 ### Running the Simulator
 ```bash
 # Start simulator server
-python -m tauro_edge simulator --port 50053
+python -m tauro_edge simulator --port 50051
 
 # Connect exactly like real hardware
 from tauro_inference.client import RemoteRobot
-robot = RemoteRobot(address="localhost:50053")
+robot = RemoteRobot(address="localhost:50051")
 robot.connect()
 robot.calibrate()  # Creates synthetic calibration data
 ```
@@ -171,7 +171,7 @@ python scripts/test_motor.py --motor-id 127 --port /dev/ttyUSB0
 python -m tauro_edge robot --host 0.0.0.0 --port 50051 --log-level DEBUG
 
 # Start simulator server (MuJoCo simulation)
-python -m tauro_edge simulator --host 0.0.0.0 --port 50053 --log-level DEBUG
+python -m tauro_edge simulator --host 0.0.0.0 --port 50051 --log-level DEBUG
 
 # Test with keyboard teleop
 python scripts/keyboard_teleop.py --robot-address localhost:50051

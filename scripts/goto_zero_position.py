@@ -22,6 +22,7 @@ def goto_zero_position(robot):
 
     # Extract joint positions
     joint_positions = {}
+    time.sleep(5)
     for motor_name, val in obs["joints"]["position"].items():
         joint_positions[motor_name] = 0
         print(f"{motor_name}: {val}")
@@ -32,7 +33,26 @@ def goto_zero_position(robot):
 
     action = {"joints": {"position": target}}
     robot.send_action(action)
-    time.sleep(10)
+    time.sleep(5)
+
+    print("**********")
+    # Get current observation
+    obs = robot.get_observation()
+    for motor_name, val in obs["joints"]["position"].items():
+        print(f"{motor_name}: {val}")
+
+    target = {}
+    for motor_name in joint_positions.keys():
+        target[motor_name] = 20
+    action = {"joints": {"position": target}}
+    robot.send_action(action)
+    time.sleep(5)
+
+    print("**********")
+    # Get current observation
+    obs = robot.get_observation()
+    for motor_name, val in obs["joints"]["position"].items():
+        print(f"{motor_name}: {val}")
 
 
 def main():

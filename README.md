@@ -49,7 +49,7 @@ uv pip install -e ".[realsense]"    # Intel RealSense support
 python -m tauro_edge.main --host 0.0.0.0 --port 50051 --log-level DEBUG
 
 # Or use the simulator for testing
-python -m tauro_edge simulator --host 0.0.0.0 --port 50053
+python -m tauro_edge simulator --host 0.0.0.0 --port 50051
 ```
 
 2. **Control the robot (from any device):**
@@ -201,10 +201,10 @@ python scripts/stream_realsense.py --port 5001
 **Run simulator:**
 ```bash
 # Start MuJoCo simulator server
-python -m tauro_edge simulator --port 50053
+python -m tauro_edge simulator --port 50051
 
 # Connect to simulated robot (same as real robot)
-python scripts/keyboard_teleop.py --robot-address localhost:50053
+python scripts/keyboard_teleop.py --robot-address localhost:50051
 ```
 
 ## Deployment

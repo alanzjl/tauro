@@ -20,6 +20,7 @@ from tauro_common.types.robot_types import (
 from tauro_common.utils.proto_utils import (
     feature_info_to_proto,
     motor_calibration_to_proto,
+    robot_state_dict_to_proto,
     robot_state_to_proto,
     timestamp_to_proto,
 )
@@ -31,10 +32,11 @@ logger = logging.getLogger(__name__)
 class SimulatorServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
     """gRPC service implementation for simulated robot control."""
 
-    def __init__(self, config_path: Path | None = None):
+    def __init__(self, config_path: Path | None = None, enable_visualization: bool = True):
         self.robots: dict[str, SimulatedRobot] = {}
         self._control_streams: dict[str, asyncio.Queue] = {}
         self._stream_tasks: dict[str, asyncio.Task] = {}
+        self.enable_visualization = enable_visualization
 
         # Load configuration if provided
         self._robot_configs = {}
@@ -82,6 +84,7 @@ class SimulatorServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
             config = SimulatedRobotConfig(
                 id=robot_id,
                 robot_type=robot_type,
+                enable_visualization=self.enable_visualization,
             )
 
             # Create and connect simulated robot
@@ -230,29 +233,8 @@ class SimulatorServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
             # Get observation from robot
             obs = robot.get_observation()
 
-            # Convert to proto format
-            joints = {}
-            if "joints" in obs:
-                joint_data = obs["joints"]
-                for motor_name in robot.motor_names:
-                    joints[motor_name] = JointState(
-                        position=float(joint_data["position"].get(motor_name, 0)),
-                        velocity=float(joint_data["velocity"].get(motor_name, 0)),
-                        torque=0.0,  # Simulated robot doesn't provide torque yet
-                        temperature=25.0,  # Default temperature
-                        is_calibrated=robot.is_calibrated,
-                    )
-
-            # Build robot state
-            robot_state = RobotState(
-                timestamp=time.time(),
-                robot_id=robot_id,
-                joints=joints,
-                sensors={},  # No additional sensors for now
-                status=RobotStatus.READY if robot.is_calibrated else RobotStatus.CONNECTED,
-            )
-
-            return robot_state_to_proto(robot_state)
+            robot_state = robot_state_dict_to_proto(obs, robot.is_calibrated, robot_id, time.time())
+            return robot_state
 
         except Exception as e:
             logger.error(f"Error getting state for simulated robot {robot_id}: {e}")
@@ -399,7 +381,10 @@ class SimulatorServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
 
 
 async def serve_async(
-    host: str = DEFAULT_GRPC_HOST, port: int = DEFAULT_GRPC_PORT, config_path: Path | None = None
+    host: str = DEFAULT_GRPC_HOST, 
+    port: int = DEFAULT_GRPC_PORT, 
+    config_path: Path | None = None,
+    enable_visualization: bool = True
 ):
     """Run the simulator gRPC server asynchronously."""
     server = grpc.aio.server(
@@ -409,7 +394,7 @@ async def serve_async(
         ]
     )
 
-    servicer = SimulatorServicer(config_path)
+    servicer = SimulatorServicer(config_path, enable_visualization)
     robot_service_pb2_grpc.add_RobotControlServiceServicer_to_server(servicer, server)
 
     listen_addr = f"{host}:{port}"
@@ -426,7 +411,10 @@ async def serve_async(
 
 
 def serve(
-    host: str = DEFAULT_GRPC_HOST, port: int = DEFAULT_GRPC_PORT, config_path: Path | None = None
+    host: str = DEFAULT_GRPC_HOST, 
+    port: int = DEFAULT_GRPC_PORT, 
+    config_path: Path | None = None,
+    enable_visualization: bool = True
 ):
     """Run the simulator gRPC server (blocking)."""
     server = grpc.server(
@@ -437,7 +425,7 @@ def serve(
         ],
     )
 
-    servicer = SimulatorServicer(config_path)
+    servicer = SimulatorServicer(config_path, enable_visualization)
     robot_service_pb2_grpc.add_RobotControlServiceServicer_to_server(servicer, server)
 
     listen_addr = f"{host}:{port}"
@@ -458,9 +446,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="MuJoCo Robot Simulator Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=50053, help="Port to bind to")
+    parser.add_argument("--port", type=int, default=50051, help="Port to bind to")
     parser.add_argument("--config", type=Path, help="Path to configuration file")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
+    parser.add_argument("--no-vis", action="store_true", help="Disable visualization (default: enabled)")
 
     args = parser.parse_args()
 
@@ -469,4 +458,4 @@ if __name__ == "__main__":
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
-    serve(args.host, args.port, args.config)
+    serve(args.host, args.port, args.config, enable_visualization=not args.no_vis)

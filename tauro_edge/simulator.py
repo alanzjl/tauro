@@ -15,8 +15,8 @@ def main():
     parser.add_argument(
         "--port",
         type=int,
-        default=50053,
-        help="Port to bind the simulator server to (default: 50053)",
+        default=50051,
+        help="Port to bind the simulator server to (default: 50051)",
     )
     parser.add_argument(
         "--config", type=Path, help="Path to configuration file for simulated robots"
@@ -26,6 +26,11 @@ def main():
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Logging level",
+    )
+    parser.add_argument(
+        "--no-vis", 
+        action="store_true", 
+        help="Disable visualization (default: enabled)"
     )
 
     args = parser.parse_args()
@@ -39,12 +44,13 @@ def main():
     logger = logging.getLogger(__name__)
     logger.info("Starting Tauro MuJoCo Robot Simulator")
     logger.info(f"Server address: {args.host}:{args.port}")
+    logger.info(f"Visualization: {'disabled' if args.no_vis else 'enabled'}")
 
     if args.config:
         logger.info(f"Using configuration file: {args.config}")
 
     try:
-        serve(args.host, args.port, args.config)
+        serve(args.host, args.port, args.config, enable_visualization=not args.no_vis)
     except KeyboardInterrupt:
         logger.info("Simulator shutdown requested")
     except Exception as e:
