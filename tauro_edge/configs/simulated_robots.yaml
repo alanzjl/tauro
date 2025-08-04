@@ -1,0 +1,29 @@
+# Configuration for simulated robots
+# This file defines simulated robot instances that can be used for testing
+
+simulated_robots:
+  # Example simulated SO100 robot
+  sim_so100_left:
+    type: so100_follower
+    model_path: null  # Uses default SO100 model
+    sim_timestep: 0.002  # 2ms simulation timestep
+    control_timestep: 0.01  # 10ms control timestep
+    
+  sim_so100_right:
+    type: so100_follower
+    model_path: null
+    sim_timestep: 0.002
+    control_timestep: 0.01
+    
+  # Example simulated SO101 robot
+  sim_so101_left:
+    type: so101_follower
+    model_path: null  # Uses default SO100 model (same kinematics)
+    sim_timestep: 0.002
+    control_timestep: 0.01
+    
+  sim_so101_right:
+    type: so101_follower
+    model_path: null
+    sim_timestep: 0.002
+    control_timestep: 0.01

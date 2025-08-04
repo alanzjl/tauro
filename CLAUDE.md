@@ -14,8 +14,10 @@ The project is organized into three main modules:
 - **Purpose**: Direct hardware control and real-time state management
 - **Location**: `tauro_edge/`
 - **Key Components**:
-  - `server.py`: gRPC server for remote robot control
-  - `robots/`: Robot implementations (SO100, SO101)
+  - `server/robot_server.py`: gRPC server for remote robot control
+  - `server/simulator_server.py`: MuJoCo-based simulator server
+  - `robots/`: Robot implementations (SO100, SO101, Simulated)
+  - `robots/simulated/`: MuJoCo physics simulation implementation
   - `motors/`: Motor controllers (CyberGear, Feetech)
   - `configs/`: Robot configuration files
   - Real-time state management and calibration
@@ -109,6 +111,39 @@ pytest
 - Calibration data: `.cache/calibration/{robot_name}.json`
 - Environment-specific settings via command-line args
 
+## Simulator
+
+### Overview
+The MuJoCo-based simulator provides a drop-in replacement for real hardware, enabling:
+- Testing without physical robots
+- Parallel development and debugging
+- Calibration behavior validation
+- Multi-robot scenarios
+
+### Key Features
+- **Calibration Realism**: Simulated robots respect calibration data (homing offsets, ranges)
+- **Protocol Compatible**: Uses same gRPC interface as real hardware
+- **Normalization**: Matches real robot normalization ([-100, 100] for joints, [0, 100] for gripper)
+- **Physics Simulation**: Full MuJoCo physics with collision detection
+
+### Running the Simulator
+```bash
+# Start simulator server
+python -m tauro_edge simulator --port 50053
+
+# Connect exactly like real hardware
+from tauro_inference.client import RemoteRobot
+robot = RemoteRobot(address="localhost:50053")
+robot.connect()
+robot.calibrate()  # Creates synthetic calibration data
+```
+
+### Calibration Behavior
+- Each simulated robot generates unique calibration offsets
+- Robots with different calibrations move to different physical positions for same commands
+- Calibration data persists in `.calibrations/robots/simulated/`
+- Mimics real motor behavior: `Present_Position = Actual_Position - Homing_Offset`
+
 ## Common Development Tasks
 
 ### Adding a New Robot
@@ -132,8 +167,11 @@ python scripts/test_motor.py --motor-id 127 --port /dev/ttyUSB0
 
 ### Testing & Debugging
 ```bash
-# Start edge server
-python -m tauro_edge.main --host 0.0.0.0 --port 50051 --log-level DEBUG
+# Start edge server (real hardware)
+python -m tauro_edge robot --host 0.0.0.0 --port 50051 --log-level DEBUG
+
+# Start simulator server (MuJoCo simulation)
+python -m tauro_edge simulator --host 0.0.0.0 --port 50053 --log-level DEBUG
 
 # Test with keyboard teleop
 python scripts/keyboard_teleop.py --robot-address localhost:50051
@@ -147,17 +185,24 @@ python scripts/stream_camera.py --camera1 0 --port 5000
 tauro/
 ├── tauro_edge/           # Hardware control
 │   ├── __main__.py      # Module entry point
-│   ├── server.py        # gRPC server
+│   ├── server/          # Server implementations
+│   │   ├── robot_server.py      # Hardware robot server
+│   │   ├── simulator_server.py  # MuJoCo simulator server
+│   │   └── sensor_server.py     # Camera/sensor server
 │   ├── robots/          # Robot implementations
+│   │   ├── simulated/   # MuJoCo simulated robots
+│   │   ├── so100_follower/
+│   │   └── so101_follower/
 │   ├── motors/          # Motor controllers
 │   └── configs/         # Configuration files
 ├── tauro_inference/      # Control algorithms
-│   ├── client.py        # Remote robot client
-│   ├── teleoperators/   # Teleoperation interfaces
+│   ├── client/          # Remote robot client
+│   ├── teleop/          # Teleoperation interfaces
 │   └── visualization/   # Viz tools
 ├── tauro_common/         # Shared components
 │   ├── proto/           # Protocol definitions
-│   ├── types.py         # Common types
+│   ├── models/          # Robot models (URDF, MuJoCo)
+│   ├── types/           # Common types
 │   └── utils/           # Utilities
 ├── scripts/              # Utility scripts
 ├── tests/               # Test suite

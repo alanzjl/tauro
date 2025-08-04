@@ -45,7 +45,11 @@ uv pip install -e ".[realsense]"    # Intel RealSense support
 
 1. **Start the robot server (on robot/edge device):**
 ```bash
+# Real hardware
 python -m tauro_edge.main --host 0.0.0.0 --port 50051 --log-level DEBUG
+
+# Or use the simulator for testing
+python -m tauro_edge simulator --host 0.0.0.0 --port 50053
 ```
 
 2. **Control the robot (from any device):**
@@ -123,11 +127,13 @@ so100:
 ### Supported Robots
 - **SO100**: 6-DOF arm with optional gripper
 - **SO101**: Similar architecture with different kinematics
+- **Simulated robots**: MuJoCo-based physics simulation for testing
 
 ### Motor Support
 - CyberGear motors (CAN bus)
 - Feetech servos (serial)
 - Unified calibration system
+- Simulated motors with realistic calibration behavior
 
 ### Teleoperation
 - Keyboard control (no X display required)
@@ -138,6 +144,12 @@ so100:
 - Camera streaming (OpenCV)
 - Intel RealSense depth cameras
 - Web-based interfaces
+
+### Simulation
+- MuJoCo physics engine integration
+- Realistic calibration and joint offset handling
+- Drop-in replacement for hardware testing
+- Multiple simulated robots support
 
 ## Development
 
@@ -184,6 +196,15 @@ python scripts/stream_camera.py --camera1 0 --port 5000
 
 # RealSense camera
 python scripts/stream_realsense.py --port 5001
+```
+
+**Run simulator:**
+```bash
+# Start MuJoCo simulator server
+python -m tauro_edge simulator --port 50053
+
+# Connect to simulated robot (same as real robot)
+python scripts/keyboard_teleop.py --robot-address localhost:50053
 ```
 
 ## Deployment
