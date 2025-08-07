@@ -1,6 +1,7 @@
 """MuJoCo-based simulated robot implementation."""
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,7 @@ class SimulatedRobotConfig:
     sim_timestep: float = 0.002  # 2ms timestep for 500Hz simulation
     control_timestep: float = 0.01  # 10ms control timestep for 100Hz control
     enable_visualization: bool = True  # Enable MuJoCo viewer
+    use_torque_control: bool = False  # Use torque control instead of position control
 
 
 class SimulatedRobot(Robot):
@@ -114,6 +116,14 @@ class SimulatedRobot(Robot):
 
         # Joint ranges will be loaded from MuJoCo model
         self.joint_ranges = []
+
+        # Simulation thread
+        self._sim_thread = None
+        self._sim_running = False
+        self._sim_lock = threading.Lock()
+
+        # Track last known viewer control values to detect manual changes
+        self._last_viewer_ctrl = None
 
     def _setup_spaces(self):
         """Set up observation and action spaces."""
@@ -232,6 +242,9 @@ class SimulatedRobot(Robot):
             self._connected = True
             self.last_update_time = time.time()
 
+            # Start simulation thread
+            self._start_simulation_thread()
+
             logger.info(f"Connected to simulated robot {self.id}")
 
             # For simulated robots, we always use perfect calibration
@@ -248,6 +261,9 @@ class SimulatedRobot(Robot):
         if not self._connected:
             logger.warning(f"Robot {self.id} not connected")
             return
+
+        # Stop simulation thread
+        self._stop_simulation_thread()
 
         # Close viewer if it exists
         if self.viewer is not None:
@@ -303,54 +319,52 @@ class SimulatedRobot(Robot):
         if not self._connected:
             raise RuntimeError("Robot not connected")
 
-        # Step simulation if needed
-        self._step_simulation()
-
         obs = {}
         logger.debug("Getting observation")
 
-        # Get joint states
-        positions = {}
-        velocities = {}
+        # Get joint states (thread-safe)
+        with self._sim_lock:
+            positions = {}
+            velocities = {}
 
-        for i, (joint_name, motor_name) in enumerate(
-            zip(self.joint_names, self.motor_names, strict=False)
-        ):
-            joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
-            if joint_id >= 0:
-                # Get raw position and velocity from MuJoCo
-                raw_pos = self.data.qpos[joint_id]
-                raw_vel = self.data.qvel[joint_id]
+            for i, (joint_name, motor_name) in enumerate(
+                zip(self.joint_names, self.motor_names, strict=False)
+            ):
+                joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+                if joint_id >= 0:
+                    # Get raw position and velocity from MuJoCo
+                    raw_pos = self.data.qpos[joint_id]
+                    raw_vel = self.data.qvel[joint_id]
 
-                # Get joint range
-                joint_min, joint_max = self.joint_ranges[i]
+                    # Get joint range
+                    joint_min, joint_max = self.joint_ranges[i]
 
-                # Normalize position to [-100, 100] or [0, 100] based on motor type
-                if motor_name == "gripper":
-                    # Gripper (Jaw joint) uses [0, 100] normalization
-                    # Map from joint range to [0, 100]
-                    if joint_max > joint_min:
-                        norm_pos = ((raw_pos - joint_min) / (joint_max - joint_min)) * 100
+                    # Normalize position to [-100, 100] or [0, 100] based on motor type
+                    if motor_name == "gripper":
+                        # Gripper (Jaw joint) uses [0, 100] normalization
+                        # Map from joint range to [0, 100]
+                        if joint_max > joint_min:
+                            norm_pos = ((raw_pos - joint_min) / (joint_max - joint_min)) * 100
+                        else:
+                            norm_pos = 0
+                        norm_pos = np.clip(norm_pos, 0, 100)
                     else:
-                        norm_pos = 0
-                    norm_pos = np.clip(norm_pos, 0, 100)
+                        # Other joints use [-100, 100] normalization
+                        # Map from joint range to [-100, 100]
+                        if joint_max > joint_min:
+                            norm_pos = ((raw_pos - joint_min) / (joint_max - joint_min)) * 200 - 100
+                        else:
+                            norm_pos = 0
+                        norm_pos = np.clip(norm_pos, -100, 100)
+
+                    positions[motor_name] = float(norm_pos)
+                    velocities[motor_name] = float(raw_vel)  # Velocity in rad/s
+                    logger.debug(
+                        f"Obs {motor_name}: raw_pos={raw_pos:.3f}, norm_pos={norm_pos:.1f}, range=[{joint_min:.3f}, {joint_max:.3f}]"
+                    )
                 else:
-                    # Other joints use [-100, 100] normalization
-                    # Map from joint range to [-100, 100]
-                    if joint_max > joint_min:
-                        norm_pos = ((raw_pos - joint_min) / (joint_max - joint_min)) * 200 - 100
-                    else:
-                        norm_pos = 0
-                    norm_pos = np.clip(norm_pos, -100, 100)
-
-                positions[motor_name] = float(norm_pos)
-                velocities[motor_name] = float(raw_vel)  # Velocity in rad/s
-                logger.debug(
-                    f"Obs {motor_name}: raw_pos={raw_pos:.3f}, norm_pos={norm_pos:.1f}, range=[{joint_min:.3f}, {joint_max:.3f}]"
-                )
-            else:
-                positions[motor_name] = 0.0
-                velocities[motor_name] = 0.0
+                    positions[motor_name] = 0.0
+                    velocities[motor_name] = 0.0
 
         # Build observation dictionary matching real robot format
         obs["joints"] = {
@@ -382,134 +396,145 @@ class SimulatedRobot(Robot):
         logger.debug(f"send_action called with: {action}")
         applied_action = {}
 
-        # Handle joint position commands
-        if "joints" in action and "position" in action["joints"]:
-            positions = action["joints"]["position"]
-            for motor_name, position in positions.items():
-                if motor_name in self.motor_names:
-                    idx = self.motor_names.index(motor_name)
+        with self._sim_lock:
+            # Handle joint position commands
+            if "joints" in action and "position" in action["joints"]:
+                positions = action["joints"]["position"]
+                for motor_name, position in positions.items():
+                    if motor_name in self.motor_names:
+                        idx = self.motor_names.index(motor_name)
 
-                    # Get joint range
-                    joint_min, joint_max = self.joint_ranges[idx]
+                        # Get joint range
+                        joint_min, joint_max = self.joint_ranges[idx]
 
-                    # Unnormalize position from [-100, 100] or [0, 100] to radians
-                    if motor_name == "gripper":
-                        # Gripper: [0, 100] -> radians
-                        target_pos = (position / 100) * (joint_max - joint_min) + joint_min
-                    else:
-                        # Other joints: [-100, 100] -> radians
-                        target_pos = ((position + 100) / 200) * (joint_max - joint_min) + joint_min
+                        # Unnormalize position from [-100, 100] or [0, 100] to radians
+                        if motor_name == "gripper":
+                            # Gripper: [0, 100] -> radians
+                            target_pos = (position / 100) * (joint_max - joint_min) + joint_min
+                        else:
+                            # Other joints: [-100, 100] -> radians
+                            target_pos = ((position + 100) / 200) * (
+                                joint_max - joint_min
+                            ) + joint_min
 
-                    # Clip to joint limits (should already be within range, but just in case)
-                    target_pos = np.clip(target_pos, joint_min, joint_max)
+                        # Clip to joint limits (should already be within range, but just in case)
+                        target_pos = np.clip(target_pos, joint_min, joint_max)
 
-                    self.target_positions[idx] = target_pos
-                    applied_action[motor_name] = position
-                    logger.debug(
-                        f"Set {motor_name} (idx={idx}) target: {position} -> {target_pos:.3f} rad (range: [{joint_min:.3f}, {joint_max:.3f}])"
-                    )
+                        self.target_positions[idx] = target_pos
+                        applied_action[motor_name] = position
+                        logger.debug(
+                            f"Set {motor_name} (idx={idx}) target: {position} -> {target_pos:.3f} rad (range: [{joint_min:.3f}, {joint_max:.3f}])"
+                        )
 
-                    # Also immediately set the control target
-                    joint_name = self.joint_names[idx]
-                    actuator_id = mujoco.mj_name2id(
-                        self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name
-                    )
-                    if actuator_id >= 0:
-                        self.data.ctrl[actuator_id] = target_pos
-                        logger.debug(f"Immediately set actuator {joint_name} ctrl={target_pos:.3f}")
+            # Handle individual motor commands (e.g., "shoulder_pan.pos": 50)
+            for key, value in action.items():
+                if key.endswith(".pos"):
+                    motor_name = key[:-4]
+                    if motor_name in self.motor_names:
+                        idx = self.motor_names.index(motor_name)
 
-        # Handle individual motor commands (e.g., "shoulder_pan.pos": 50)
-        for key, value in action.items():
-            if key.endswith(".pos"):
-                motor_name = key[:-4]
-                if motor_name in self.motor_names:
-                    idx = self.motor_names.index(motor_name)
+                        # Get joint range
+                        joint_min, joint_max = self.joint_ranges[idx]
 
-                    # Get joint range
-                    joint_min, joint_max = self.joint_ranges[idx]
+                        # Unnormalize position from [-100, 100] or [0, 100] to radians
+                        if motor_name == "gripper":
+                            # Gripper: [0, 100] -> radians
+                            target_pos = (value / 100) * (joint_max - joint_min) + joint_min
+                        else:
+                            # Other joints: [-100, 100] -> radians
+                            target_pos = ((value + 100) / 200) * (joint_max - joint_min) + joint_min
 
-                    # Unnormalize position from [-100, 100] or [0, 100] to radians
-                    if motor_name == "gripper":
-                        # Gripper: [0, 100] -> radians
-                        target_pos = (value / 100) * (joint_max - joint_min) + joint_min
-                    else:
-                        # Other joints: [-100, 100] -> radians
-                        target_pos = ((value + 100) / 200) * (joint_max - joint_min) + joint_min
+                        # Clip to joint limits
+                        target_pos = np.clip(target_pos, joint_min, joint_max)
 
-                    # Clip to joint limits
-                    target_pos = np.clip(target_pos, joint_min, joint_max)
-
-                    self.target_positions[idx] = target_pos
-                    applied_action[motor_name] = value
-
-        # Step simulation to apply actions
-        self._step_simulation()
-
-        # Force an immediate viewer update after applying action
-        self._update_viewer()
+                        self.target_positions[idx] = target_pos
+                        applied_action[motor_name] = value
 
         logger.debug(f"Applied action: {applied_action}")
         logger.debug(f"Target positions: {self.target_positions}")
         return applied_action
 
-    def _step_simulation(self):
-        """Step the MuJoCo simulation."""
-        if not self._connected:
-            return
+    def _simulation_thread_loop(self):
+        """Continuous simulation loop that runs in a separate thread."""
+        logger.info("Starting simulation thread")
+        last_step_time = time.time()
 
-        current_time = time.time()
-        dt = current_time - self.last_update_time
+        while self._sim_running:
+            current_time = time.time()
+            dt = current_time - last_step_time
 
-        # Only step if enough time has passed
-        if dt < self.config.control_timestep:
-            logger.debug(
-                f"Skipping step: dt={dt:.4f} < control_timestep={self.config.control_timestep}"
-            )
-            # Even if we skip stepping, update viewer with current state
-            self._update_viewer()
-            return
+            # Step at regular intervals
+            if dt >= self.config.sim_timestep:
+                with self._sim_lock:
+                    if self.data is not None and self.model is not None:
+                        # First, check if viewer sliders have been moved manually
+                        viewer_changed = False
+                        if self.viewer is not None and self._last_viewer_ctrl is not None:
+                            try:
+                                for i, joint_name in enumerate(self.joint_names):
+                                    actuator_id = mujoco.mj_name2id(
+                                        self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name
+                                    )
+                                    if actuator_id >= 0:
+                                        current_ctrl = self.data.ctrl[actuator_id]
+                                        # Check if viewer slider was moved (changed from last known value)
+                                        if (
+                                            abs(current_ctrl - self._last_viewer_ctrl[actuator_id])
+                                            > 0.001
+                                        ):
+                                            # Viewer was manually changed, update our target
+                                            self.target_positions[i] = current_ctrl
+                                            viewer_changed = True
+                                            logger.debug(
+                                                f"Viewer manually moved {joint_name} to {current_ctrl:.3f}"
+                                            )
+                            except Exception:
+                                pass  # Viewer might be closed
 
-        logger.debug(f"Stepping simulation: dt={dt:.4f}s")
+                        # If viewer wasn't changed, apply our target positions to control
+                        if not viewer_changed:
+                            for i, joint_name in enumerate(self.joint_names):
+                                actuator_id = mujoco.mj_name2id(
+                                    self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name
+                                )
+                                if actuator_id >= 0:
+                                    # Set control to our target position
+                                    self.data.ctrl[actuator_id] = self.target_positions[i]
 
-        # Set control targets
-        for i, joint_name in enumerate(self.joint_names):
-            actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
-            if actuator_id >= 0:
-                self.data.ctrl[actuator_id] = self.target_positions[i]
-                logger.debug(
-                    f"Set actuator {joint_name} (id={actuator_id}) ctrl={self.target_positions[i]:.3f}"
-                )
-            else:
-                logger.warning(f"Actuator not found for joint {joint_name}")
+                        # Remember current control values for next iteration
+                        if self._last_viewer_ctrl is None:
+                            self._last_viewer_ctrl = np.zeros(self.model.nu)
+                        self._last_viewer_ctrl[:] = self.data.ctrl[:]
 
-        # Step simulation
-        steps = int(dt / self.config.sim_timestep)
-        actual_steps = min(steps, 100)  # Cap at 100 steps to prevent hanging
-        logger.debug(
-            f"Taking {actual_steps} simulation steps (sim_timestep={self.config.sim_timestep})"
-        )
+                        # Step physics
+                        mujoco.mj_step(self.model, self.data)
 
-        for _ in range(actual_steps):
-            mujoco.mj_step(self.model, self.data)
+                        # Update viewer
+                        if self.viewer is not None:
+                            try:
+                                self.viewer.sync()
+                            except Exception:
+                                pass  # Viewer might be closed
 
-        # Log resulting positions
-        current_positions = [
-            self.data.qpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn)]
-            for jn in self.joint_names
-            if mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn) >= 0
-        ]
-        logger.debug(f"Current qpos after step: {current_positions}")
+                last_step_time = current_time
 
-        # Update viewer with new state
-        self._update_viewer()
+            # Small sleep to prevent CPU spinning
+            time.sleep(0.001)
 
-        self.last_update_time = current_time
+        logger.info("Simulation thread stopped")
 
-    def _update_viewer(self):
-        """Update viewer with current simulation state."""
-        # Sync viewer if it exists
-        if self.viewer is not None:
-            try:
-                self.viewer.sync()
-            except AttributeError:
-                pass
+    def _start_simulation_thread(self):
+        """Start the continuous simulation thread."""
+        if self._sim_thread is None or not self._sim_thread.is_alive():
+            self._sim_running = True
+            self._sim_thread = threading.Thread(target=self._simulation_thread_loop, daemon=True)
+            self._sim_thread.start()
+            logger.info("Simulation thread started")
+
+    def _stop_simulation_thread(self):
+        """Stop the continuous simulation thread."""
+        if self._sim_thread is not None and self._sim_thread.is_alive():
+            self._sim_running = False
+            self._sim_thread.join(timeout=1.0)
+            self._sim_thread = None
+            logger.info("Simulation thread stopped")
