@@ -5,8 +5,8 @@ Shows how to read current robot pose and apply small deltas in both joint and en
 """
 
 import argparse
-import time
 import asyncio
+import time
 
 from tauro_inference.client import RobotClient
 
@@ -24,7 +24,6 @@ def goto_zero_position(robot):
         joint_positions[motor_name] = val.position
     print(joint_positions)
 
-
     # Send action to move to zero position
     time.sleep(1)
     action = {"joints": {"position": {k: 0.0 for k in joint_positions.keys()}}}
@@ -35,6 +34,7 @@ def goto_zero_position(robot):
     action = {"joints": {"position": {k: 20.0 for k in joint_positions.keys()}}}
     robot.send_action(action)
     time.sleep(1)
+
 
 async def goto_zero_position_async(robot):
     """Test joint space control by applying small deltas to current positions."""
@@ -67,6 +67,7 @@ def main(args):
         goto_zero_position(robot)
         print("\nTest completed!")
 
+
 async def main_async(args):
     async with RobotClient(
         robot_id=args.robot_id, robot_type=args.robot_type, host=args.host, port=args.port
@@ -83,7 +84,7 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="127.0.0.1", help="Robot server host")
     parser.add_argument("--port", type=int, default=50051, help="Robot server port")
     args = parser.parse_args()
-    
+
     main(args)
     time.sleep(1)
     asyncio.run(main_async(args))

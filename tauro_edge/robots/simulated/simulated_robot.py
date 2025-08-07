@@ -1,8 +1,6 @@
 """MuJoCo-based simulated robot implementation."""
 
 import logging
-import platform
-import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +11,7 @@ import numpy as np
 
 try:
     import mujoco.viewer
+
     HAS_VIEWER = True
 except ImportError:
     HAS_VIEWER = False
@@ -112,7 +111,7 @@ class SimulatedRobot(Robot):
         # Control state
         self.target_positions = np.zeros(len(self.joint_names))
         self.last_update_time = 0
-        
+
         # Joint ranges will be loaded from MuJoCo model
         self.joint_ranges = []
 
@@ -179,12 +178,12 @@ class SimulatedRobot(Robot):
             # Load MuJoCo model
             self.model = mujoco.MjModel.from_xml_path(str(self.model_path))
             self.data = mujoco.MjData(self.model)
-            
+
             # Initialize viewer if visualization is enabled
             if self.config.enable_visualization and HAS_VIEWER:
                 # On macOS, require mjpython for visualization
                 logger.warning("!!!!Visualization on macOS requires mjpython!!!!")
-                
+
                 try:
                     # Launch passive viewer
                     self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
@@ -205,7 +204,7 @@ class SimulatedRobot(Robot):
                 else:
                     # Default range if joint not found
                     self.joint_ranges.append((-np.pi, np.pi))
-            
+
             # Initialize to home position
             home_key = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_KEY, "home")
             if home_key >= 0:
@@ -215,7 +214,9 @@ class SimulatedRobot(Robot):
                     joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
                     if joint_id >= 0:
                         self.target_positions[i] = self.data.qpos[joint_id]
-                logger.info(f"Initialized to home position, target_positions: {self.target_positions}")
+                logger.info(
+                    f"Initialized to home position, target_positions: {self.target_positions}"
+                )
                 logger.info(f"Home qpos: {self.data.qpos[:len(self.joint_names)]}")
             else:
                 # Set default home position
@@ -247,7 +248,7 @@ class SimulatedRobot(Robot):
         if not self._connected:
             logger.warning(f"Robot {self.id} not connected")
             return
-        
+
         # Close viewer if it exists
         if self.viewer is not None:
             try:
@@ -266,16 +267,16 @@ class SimulatedRobot(Robot):
         """Calibrate the simulated robot."""
         if not self._connected:
             raise RuntimeError("Robot must be connected before calibration")
-        
+
         # For simulated robots, calibration is always perfect
         self._setup_perfect_calibration()
         logger.info(f"Calibrated simulated robot {self.id} (perfect calibration)")
-    
+
     def _setup_perfect_calibration(self):
         """Set up perfect calibration for simulated robot."""
         # Create calibration data that represents perfect calibration
         self.calibration = {}
-        
+
         for i, motor_name in enumerate(self.motor_names):
             # Perfect calibration: no offset, full range
             self.calibration[motor_name] = MotorCalibration(
@@ -285,7 +286,7 @@ class SimulatedRobot(Robot):
                 range_min=0,
                 range_max=4095,  # Full encoder range
             )
-        
+
         self._calibrated = True
 
     def configure(self) -> None:
@@ -320,10 +321,10 @@ class SimulatedRobot(Robot):
                 # Get raw position and velocity from MuJoCo
                 raw_pos = self.data.qpos[joint_id]
                 raw_vel = self.data.qvel[joint_id]
-                
+
                 # Get joint range
                 joint_min, joint_max = self.joint_ranges[i]
-                
+
                 # Normalize position to [-100, 100] or [0, 100] based on motor type
                 if motor_name == "gripper":
                     # Gripper (Jaw joint) uses [0, 100] normalization
@@ -341,10 +342,12 @@ class SimulatedRobot(Robot):
                     else:
                         norm_pos = 0
                     norm_pos = np.clip(norm_pos, -100, 100)
-                
+
                 positions[motor_name] = float(norm_pos)
                 velocities[motor_name] = float(raw_vel)  # Velocity in rad/s
-                logger.debug(f"Obs {motor_name}: raw_pos={raw_pos:.3f}, norm_pos={norm_pos:.1f}, range=[{joint_min:.3f}, {joint_max:.3f}]")
+                logger.debug(
+                    f"Obs {motor_name}: raw_pos={raw_pos:.3f}, norm_pos={norm_pos:.1f}, range=[{joint_min:.3f}, {joint_max:.3f}]"
+                )
             else:
                 positions[motor_name] = 0.0
                 velocities[motor_name] = 0.0
@@ -375,7 +378,7 @@ class SimulatedRobot(Robot):
         """
         if not self._connected:
             raise RuntimeError("Robot not connected")
-        
+
         logger.debug(f"send_action called with: {action}")
         applied_action = {}
 
@@ -385,10 +388,10 @@ class SimulatedRobot(Robot):
             for motor_name, position in positions.items():
                 if motor_name in self.motor_names:
                     idx = self.motor_names.index(motor_name)
-                    
+
                     # Get joint range
                     joint_min, joint_max = self.joint_ranges[idx]
-                    
+
                     # Unnormalize position from [-100, 100] or [0, 100] to radians
                     if motor_name == "gripper":
                         # Gripper: [0, 100] -> radians
@@ -396,17 +399,21 @@ class SimulatedRobot(Robot):
                     else:
                         # Other joints: [-100, 100] -> radians
                         target_pos = ((position + 100) / 200) * (joint_max - joint_min) + joint_min
-                    
+
                     # Clip to joint limits (should already be within range, but just in case)
                     target_pos = np.clip(target_pos, joint_min, joint_max)
-                    
+
                     self.target_positions[idx] = target_pos
                     applied_action[motor_name] = position
-                    logger.debug(f"Set {motor_name} (idx={idx}) target: {position} -> {target_pos:.3f} rad (range: [{joint_min:.3f}, {joint_max:.3f}])")
-                    
+                    logger.debug(
+                        f"Set {motor_name} (idx={idx}) target: {position} -> {target_pos:.3f} rad (range: [{joint_min:.3f}, {joint_max:.3f}])"
+                    )
+
                     # Also immediately set the control target
                     joint_name = self.joint_names[idx]
-                    actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
+                    actuator_id = mujoco.mj_name2id(
+                        self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name
+                    )
                     if actuator_id >= 0:
                         self.data.ctrl[actuator_id] = target_pos
                         logger.debug(f"Immediately set actuator {joint_name} ctrl={target_pos:.3f}")
@@ -417,30 +424,30 @@ class SimulatedRobot(Robot):
                 motor_name = key[:-4]
                 if motor_name in self.motor_names:
                     idx = self.motor_names.index(motor_name)
-                    
+
                     # Get joint range
                     joint_min, joint_max = self.joint_ranges[idx]
-                    
+
                     # Unnormalize position from [-100, 100] or [0, 100] to radians
                     if motor_name == "gripper":
                         # Gripper: [0, 100] -> radians
                         target_pos = (value / 100) * (joint_max - joint_min) + joint_min
                     else:
-                        # Other joints: [-100, 100] -> radians  
+                        # Other joints: [-100, 100] -> radians
                         target_pos = ((value + 100) / 200) * (joint_max - joint_min) + joint_min
-                    
+
                     # Clip to joint limits
                     target_pos = np.clip(target_pos, joint_min, joint_max)
-                    
+
                     self.target_positions[idx] = target_pos
                     applied_action[motor_name] = value
 
         # Step simulation to apply actions
         self._step_simulation()
-        
+
         # Force an immediate viewer update after applying action
         self._update_viewer()
-        
+
         logger.debug(f"Applied action: {applied_action}")
         logger.debug(f"Target positions: {self.target_positions}")
         return applied_action
@@ -455,11 +462,13 @@ class SimulatedRobot(Robot):
 
         # Only step if enough time has passed
         if dt < self.config.control_timestep:
-            logger.debug(f"Skipping step: dt={dt:.4f} < control_timestep={self.config.control_timestep}")
+            logger.debug(
+                f"Skipping step: dt={dt:.4f} < control_timestep={self.config.control_timestep}"
+            )
             # Even if we skip stepping, update viewer with current state
             self._update_viewer()
             return
-        
+
         logger.debug(f"Stepping simulation: dt={dt:.4f}s")
 
         # Set control targets
@@ -467,28 +476,35 @@ class SimulatedRobot(Robot):
             actuator_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, joint_name)
             if actuator_id >= 0:
                 self.data.ctrl[actuator_id] = self.target_positions[i]
-                logger.debug(f"Set actuator {joint_name} (id={actuator_id}) ctrl={self.target_positions[i]:.3f}")
+                logger.debug(
+                    f"Set actuator {joint_name} (id={actuator_id}) ctrl={self.target_positions[i]:.3f}"
+                )
             else:
                 logger.warning(f"Actuator not found for joint {joint_name}")
 
         # Step simulation
         steps = int(dt / self.config.sim_timestep)
         actual_steps = min(steps, 100)  # Cap at 100 steps to prevent hanging
-        logger.debug(f"Taking {actual_steps} simulation steps (sim_timestep={self.config.sim_timestep})")
-        
+        logger.debug(
+            f"Taking {actual_steps} simulation steps (sim_timestep={self.config.sim_timestep})"
+        )
+
         for _ in range(actual_steps):
             mujoco.mj_step(self.model, self.data)
-        
+
         # Log resulting positions
-        current_positions = [self.data.qpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn)] 
-                           for jn in self.joint_names if mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn) >= 0]
+        current_positions = [
+            self.data.qpos[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn)]
+            for jn in self.joint_names
+            if mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, jn) >= 0
+        ]
         logger.debug(f"Current qpos after step: {current_positions}")
-        
+
         # Update viewer with new state
         self._update_viewer()
 
         self.last_update_time = current_time
-    
+
     def _update_viewer(self):
         """Update viewer with current simulation state."""
         # Sync viewer if it exists
@@ -497,4 +513,3 @@ class SimulatedRobot(Robot):
                 self.viewer.sync()
             except AttributeError:
                 pass
-    

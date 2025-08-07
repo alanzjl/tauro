@@ -5,9 +5,9 @@ import atexit
 import inspect
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 import grpc
 import grpc.aio
@@ -37,25 +37,24 @@ _sync_loop_thread = None
 def get_sync_loop():
     """Get or create the global event loop for synchronous operations."""
     global _sync_loop, _sync_loop_thread
-    
+
     if _sync_loop is None or _sync_loop.is_closed():
         import threading
-        import concurrent.futures
-        
+
         # Create a new event loop in a separate thread
         def run_loop():
             global _sync_loop
             _sync_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(_sync_loop)
             _sync_loop.run_forever()
-        
+
         _sync_loop_thread = threading.Thread(target=run_loop, daemon=True)
         _sync_loop_thread.start()
-        
+
         # Wait for the loop to be ready
         while _sync_loop is None:
             time.sleep(0.001)
-    
+
     return _sync_loop
 
 
@@ -76,6 +75,7 @@ atexit.register(cleanup_sync_loop)
 
 def sync_async_method(async_func: Callable) -> Callable:
     """Decorator to create both sync and async versions of a method."""
+
     @wraps(async_func)
     def wrapper(self, *args, **kwargs):
         if inspect.iscoroutinefunction(async_func):
@@ -87,15 +87,11 @@ def sync_async_method(async_func: Callable) -> Callable:
             except RuntimeError:
                 # No running loop, use sync mode
                 loop = get_sync_loop()
-                import concurrent.futures
-                future = asyncio.run_coroutine_threadsafe(
-                    async_func(self, *args, **kwargs), 
-                    loop
-                )
+                future = asyncio.run_coroutine_threadsafe(async_func(self, *args, **kwargs), loop)
                 return future.result()
         else:
             return async_func(self, *args, **kwargs)
-    
+
     return wrapper
 
 
@@ -103,37 +99,39 @@ class RobotClient:
     """
     Unified client for communicating with tauro_edge robot control server.
     Supports both synchronous and asynchronous operations.
-    
+
     All methods can be called both synchronously and asynchronously:
     - Sync: client.connect()
     - Async: await client.connect()
     """
 
-    def __init__(self, 
-                 robot_id: str,
-                 robot_type: str,
-                 host: str = DEFAULT_GRPC_HOST, 
-                 port: int = DEFAULT_GRPC_PORT,
-                 config: dict | None = None):
+    def __init__(
+        self,
+        robot_id: str,
+        robot_type: str,
+        host: str = DEFAULT_GRPC_HOST,
+        port: int = DEFAULT_GRPC_PORT,
+        config: dict | None = None,
+    ):
         self.robot_id = robot_id
         self.robot_type = robot_type
         self.host = host
         self.port = port
         self.address = f"{host}:{port}"
         self.config = config
-        
+
         # Unified channel and stub (async by default)
         self.channel: grpc.aio.Channel | None = None
         self.stub: robot_service_pb2_grpc.RobotControlServiceStub | None = None
-        
+
         # Streaming control state
         self._stream_task: asyncio.Task | None = None
         self._command_queue: asyncio.Queue | None = None
         self._state_queue: asyncio.Queue | None = None
-        
+
         # Track if we're using sync mode
         self._sync_mode = False
-    
+
     def __enter__(self):
         """Sync context manager entry."""
         self._sync_mode = True
@@ -144,12 +142,12 @@ class RobotClient:
         """Sync context manager exit."""
         self.disconnect()
         self._sync_mode = False
-    
+
     async def __aenter__(self):
         """Async context manager entry."""
         await self.connect()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.disconnect()
@@ -165,7 +163,7 @@ class RobotClient:
         # Use the sync event loop if in sync mode
         if self._sync_mode:
             loop = get_sync_loop()
-            
+
             # Create channel with the sync loop
             def create_channel():
                 asyncio.set_event_loop(loop)
@@ -176,8 +174,9 @@ class RobotClient:
                         ("grpc.max_receive_message_length", MAX_MESSAGE_SIZE),
                     ],
                 )
-            
+
             import concurrent.futures
+
             future = concurrent.futures.ThreadPoolExecutor().submit(create_channel)
             self.channel = future.result()
         else:
@@ -188,7 +187,7 @@ class RobotClient:
                     ("grpc.max_receive_message_length", MAX_MESSAGE_SIZE),
                 ],
             )
-        
+
         self.stub = robot_service_pb2_grpc.RobotControlServiceStub(self.channel)
 
         # Test connection with health check
@@ -200,7 +199,7 @@ class RobotClient:
             self.channel = None
             self.stub = None
             raise ConnectionError(f"Failed to connect to server: {e}") from e
-        
+
         # Connect to the specific robot
         self._ensure_connected()
 
@@ -230,17 +229,19 @@ class RobotClient:
                 if response.success:
                     logger.info(f"Disconnected from robot {self.robot_id}")
                 else:
-                    logger.error(f"Failed to disconnect from robot {self.robot_id}: {response.message}")
+                    logger.error(
+                        f"Failed to disconnect from robot {self.robot_id}: {response.message}"
+                    )
             except grpc.RpcError as e:
                 logger.error(f"gRPC error disconnecting from robot: {e}")
-        
+
         if self.channel is not None:
             await self.channel.close()
             self.channel = None
             self.stub = None
             logger.info("Disconnected from server")
         return True
-    
+
     @sync_async_method
     async def calibrate(self) -> dict[str, MotorCalibration] | None:
         """Calibrate the robot and return calibration data."""
@@ -277,16 +278,17 @@ class RobotClient:
         except grpc.RpcError as e:
             logger.error(f"gRPC error getting robot state: {e}")
             return None
-    
+
     @sync_async_method
     async def get_observation(self) -> dict[str, Any]:
         """Get current observation from the robot (alias for get_robot_state with dict conversion)."""
         state = await self.get_robot_state()
         if state is None:
             return {}
-        
+
         # Convert RobotState to observation dict format
         from tauro_common.utils.proto_utils import robot_state_to_dict
+
         return robot_state_to_dict(state)
 
     @sync_async_method

@@ -381,10 +381,10 @@ class SimulatorServicer(robot_service_pb2_grpc.RobotControlServiceServicer):
 
 
 async def serve_async(
-    host: str = DEFAULT_GRPC_HOST, 
-    port: int = DEFAULT_GRPC_PORT, 
+    host: str = DEFAULT_GRPC_HOST,
+    port: int = DEFAULT_GRPC_PORT,
     config_path: Path | None = None,
-    enable_visualization: bool = True
+    enable_visualization: bool = True,
 ):
     """Run the simulator gRPC server asynchronously."""
     server = grpc.aio.server(
@@ -411,10 +411,10 @@ async def serve_async(
 
 
 def serve(
-    host: str = DEFAULT_GRPC_HOST, 
-    port: int = DEFAULT_GRPC_PORT, 
+    host: str = DEFAULT_GRPC_HOST,
+    port: int = DEFAULT_GRPC_PORT,
     config_path: Path | None = None,
-    enable_visualization: bool = True
+    enable_visualization: bool = True,
 ):
     """Run the simulator gRPC server (blocking)."""
     server = grpc.server(
@@ -449,7 +449,9 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=50051, help="Port to bind to")
     parser.add_argument("--config", type=Path, help="Path to configuration file")
     parser.add_argument("--log-level", default="INFO", help="Logging level")
-    parser.add_argument("--no-vis", action="store_true", help="Disable visualization (default: enabled)")
+    parser.add_argument(
+        "--no-vis", action="store_true", help="Disable visualization (default: enabled)"
+    )
 
     args = parser.parse_args()
 

@@ -41,7 +41,9 @@ def main():
     sim_parser.add_argument("--port", type=int, default=DEFAULT_GRPC_PORT, help="Port to bind to")
     sim_parser.add_argument("--config", type=Path, help="Path to simulator configuration")
     sim_parser.add_argument("--log-level", default="INFO", help="Logging level")
-    sim_parser.add_argument("--no-vis", action="store_true", help="Disable visualization (default: enabled)")
+    sim_parser.add_argument(
+        "--no-vis", action="store_true", help="Disable visualization (default: enabled)"
+    )
 
     args = parser.parse_args()
 

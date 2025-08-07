@@ -28,9 +28,7 @@ def main():
         help="Logging level",
     )
     parser.add_argument(
-        "--no-vis", 
-        action="store_true", 
-        help="Disable visualization (default: enabled)"
+        "--no-vis", action="store_true", help="Disable visualization (default: enabled)"
     )
 
     args = parser.parse_args()
