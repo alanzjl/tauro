@@ -12,7 +12,7 @@ from tauro_common.types.robot_types import (
     ControlMode,
     RobotStatus,
 )
-from tauro_inference.client.robot_client import AsyncRobotClient, RobotClient
+from tauro_inference.client.robot_client import RobotClient
 
 
 class MockStub:
@@ -236,21 +236,21 @@ class TestAsyncRobotClient:
     @pytest.mark.asyncio
     async def test_connect_to_server(self):
         """Test async connecting to server."""
-        client = AsyncRobotClient()
+        client = RobotClient()  # Using unified RobotClient
 
         with patch("grpc.aio.insecure_channel") as mock_channel:
-            with patch.object(client, "health_check") as mock_health:
+            with patch.object(client, "ahealth_check") as mock_health:
                 mock_health.return_value = MagicMock(is_healthy=True)
 
-                await client.connect_to_server()
+                await client.aconnect_to_server()
 
-                assert client.channel is not None
-                assert client.stub is not None
+                assert client.async_channel is not None
+                assert client.async_stub is not None
 
     @pytest.mark.asyncio
     async def test_stream_control(self):
         """Test streaming control."""
-        client = AsyncRobotClient()
+        client = RobotClient()  # Using unified RobotClient
 
         # Mock stub with async streaming
         mock_stub = MagicMock()
@@ -263,7 +263,7 @@ class TestAsyncRobotClient:
                 yield state
 
         mock_stub.StreamControl = mock_stream
-        client.stub = mock_stub
+        client.async_stub = mock_stub
 
         # Create command generator
         async def command_generator():

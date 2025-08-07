@@ -1,1 +1,1 @@
-from .remote_robot import RemoteRobot
+from .robot_client import RobotClient
