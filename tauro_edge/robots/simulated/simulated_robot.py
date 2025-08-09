@@ -19,6 +19,13 @@ except ImportError:
 
 from tauro_edge.motors import MotorCalibration
 from tauro_edge.robots.robot import Robot
+from tauro_edge.utils.robot_config import (
+    denormalize_position,
+    get_robot_config,
+    normalize_position,
+    setup_action_space,
+    setup_observation_space,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,28 +88,9 @@ class SimulatedRobot(Robot):
         self.viewer = None  # MuJoCo viewer (if visualization enabled)
 
         # Joint mapping based on robot type
-        if config.robot_type == "so100_follower":
-            self.joint_names = ["Rotation", "Pitch", "Elbow", "Wrist_Pitch", "Wrist_Roll", "Jaw"]
-            self.motor_names = [
-                "shoulder_pan",
-                "shoulder_lift",
-                "elbow_flex",
-                "wrist_flex",
-                "wrist_roll",
-                "gripper",
-            ]
-        elif config.robot_type == "so101_follower":
-            self.joint_names = ["Rotation", "Pitch", "Elbow", "Wrist_Pitch", "Wrist_Roll", "Jaw"]
-            self.motor_names = [
-                "waist",
-                "shoulder",
-                "elbow",
-                "wrist_angle",
-                "wrist_rotate",
-                "gripper",
-            ]
-        else:
-            raise ValueError(f"Unsupported robot type: {config.robot_type}")
+        robot_cfg = get_robot_config(config.robot_type)
+        self.joint_names = robot_cfg["joint_names"]
+        self.motor_names = robot_cfg["motor_names"]
 
         # Motor configurations (mimicking real robot)
         self.motor_configs = {name: {"id": i} for i, name in enumerate(self.motor_names)}
@@ -127,42 +115,8 @@ class SimulatedRobot(Robot):
 
     def _setup_spaces(self):
         """Set up observation and action spaces."""
-        # Joint space observation
-        joint_space = {
-            "position": {
-                motor: {"shape": (), "dtype": np.dtype(np.float32), "names": None}
-                for motor in self.motor_names
-            },
-            "velocity": {
-                motor: {"shape": (), "dtype": np.dtype(np.float32), "names": None}
-                for motor in self.motor_names
-            },
-        }
-
-        # End effector observation
-        end_effector_space = {
-            "position": {
-                "shape": (3,),
-                "dtype": np.dtype(np.float32),
-                "names": ["x", "y", "z"],
-            },
-            "orientation": {
-                "shape": (9,),
-                "dtype": np.dtype(np.float32),
-                "names": None,
-            },
-        }
-
-        self.observation_space = {
-            "joint": joint_space,
-            "end_effector": end_effector_space,
-        }
-
-        # Action space
-        self.action_space = {
-            f"{motor}.pos": {"shape": (), "dtype": np.dtype(np.float32), "names": None}
-            for motor in self.motor_names
-        }
+        self.observation_space = setup_observation_space(self.motor_names)
+        self.action_space = setup_action_space(self.motor_names)
 
     @property
     def is_connected(self) -> bool:
@@ -336,31 +290,13 @@ class SimulatedRobot(Robot):
                     raw_pos = self.data.qpos[joint_id]
                     raw_vel = self.data.qvel[joint_id]
 
-                    # Get joint range
-                    joint_min, joint_max = self.joint_ranges[i]
-
-                    # Normalize position to [-100, 100] or [0, 100] based on motor type
-                    if motor_name == "gripper":
-                        # Gripper (Jaw joint) uses [0, 100] normalization
-                        # Map from joint range to [0, 100]
-                        if joint_max > joint_min:
-                            norm_pos = ((raw_pos - joint_min) / (joint_max - joint_min)) * 100
-                        else:
-                            norm_pos = 0
-                        norm_pos = np.clip(norm_pos, 0, 100)
-                    else:
-                        # Other joints use [-100, 100] normalization
-                        # Map from joint range to [-100, 100]
-                        if joint_max > joint_min:
-                            norm_pos = ((raw_pos - joint_min) / (joint_max - joint_min)) * 200 - 100
-                        else:
-                            norm_pos = 0
-                        norm_pos = np.clip(norm_pos, -100, 100)
+                    # Normalize position
+                    norm_pos = normalize_position(raw_pos, self.joint_ranges[i], motor_name)
 
                     positions[motor_name] = float(norm_pos)
                     velocities[motor_name] = float(raw_vel)  # Velocity in rad/s
                     logger.debug(
-                        f"Obs {motor_name}: raw_pos={raw_pos:.3f}, norm_pos={norm_pos:.1f}, range=[{joint_min:.3f}, {joint_max:.3f}]"
+                        f"Obs {motor_name}: raw_pos={raw_pos:.3f}, norm_pos={norm_pos:.1f}, range={self.joint_ranges[i]}"
                     )
                 else:
                     positions[motor_name] = 0.0
@@ -404,26 +340,15 @@ class SimulatedRobot(Robot):
                     if motor_name in self.motor_names:
                         idx = self.motor_names.index(motor_name)
 
-                        # Get joint range
-                        joint_min, joint_max = self.joint_ranges[idx]
-
-                        # Unnormalize position from [-100, 100] or [0, 100] to radians
-                        if motor_name == "gripper":
-                            # Gripper: [0, 100] -> radians
-                            target_pos = (position / 100) * (joint_max - joint_min) + joint_min
-                        else:
-                            # Other joints: [-100, 100] -> radians
-                            target_pos = ((position + 100) / 200) * (
-                                joint_max - joint_min
-                            ) + joint_min
-
-                        # Clip to joint limits (should already be within range, but just in case)
-                        target_pos = np.clip(target_pos, joint_min, joint_max)
+                        # Denormalize position
+                        target_pos = denormalize_position(
+                            position, self.joint_ranges[idx], motor_name
+                        )
 
                         self.target_positions[idx] = target_pos
                         applied_action[motor_name] = position
                         logger.debug(
-                            f"Set {motor_name} (idx={idx}) target: {position} -> {target_pos:.3f} rad (range: [{joint_min:.3f}, {joint_max:.3f}])"
+                            f"Set {motor_name} (idx={idx}) target: {position} -> {target_pos:.3f} rad (range: {self.joint_ranges[idx]})"
                         )
 
             # Handle individual motor commands (e.g., "shoulder_pan.pos": 50)
@@ -433,19 +358,8 @@ class SimulatedRobot(Robot):
                     if motor_name in self.motor_names:
                         idx = self.motor_names.index(motor_name)
 
-                        # Get joint range
-                        joint_min, joint_max = self.joint_ranges[idx]
-
-                        # Unnormalize position from [-100, 100] or [0, 100] to radians
-                        if motor_name == "gripper":
-                            # Gripper: [0, 100] -> radians
-                            target_pos = (value / 100) * (joint_max - joint_min) + joint_min
-                        else:
-                            # Other joints: [-100, 100] -> radians
-                            target_pos = ((value + 100) / 200) * (joint_max - joint_min) + joint_min
-
-                        # Clip to joint limits
-                        target_pos = np.clip(target_pos, joint_min, joint_max)
+                        # Denormalize position
+                        target_pos = denormalize_position(value, self.joint_ranges[idx], motor_name)
 
                         self.target_positions[idx] = target_pos
                         applied_action[motor_name] = value

@@ -35,6 +35,12 @@ from tauro_common.utils.proto_utils import (
     timestamp_to_proto,
 )
 from tauro_edge.motors import MotorCalibration
+from tauro_edge.utils.robot_config import (
+    denormalize_position,
+    get_robot_config,
+    normalize_position,
+    setup_observation_space,
+)
 from tauro_edge.utils.scene_builder import SceneBuilder
 
 logger = logging.getLogger(__name__)
@@ -52,28 +58,12 @@ class RobotInstance:
         self.calibration = {}
 
         # Motor naming based on robot type
-        if robot_type == "so100_follower":
-            self.motor_names = [
-                "shoulder_pan",
-                "shoulder_lift",
-                "elbow_flex",
-                "wrist_flex",
-                "wrist_roll",
-                "gripper",
-            ]
-            self.joint_names = ["Rotation", "Pitch", "Elbow", "Wrist_Pitch", "Wrist_Roll", "Jaw"]
-        elif robot_type == "so101_follower":
-            self.motor_names = [
-                "waist",
-                "shoulder",
-                "elbow",
-                "wrist_angle",
-                "wrist_rotate",
-                "gripper",
-            ]
-            self.joint_names = ["Rotation", "Pitch", "Elbow", "Wrist_Pitch", "Wrist_Roll", "Jaw"]
-        else:
-            # Default naming
+        try:
+            robot_cfg = get_robot_config(robot_type)
+            self.motor_names = robot_cfg["motor_names"]
+            self.joint_names = robot_cfg["joint_names"]
+        except ValueError:
+            # Default naming for unknown robot types
             self.motor_names = [f"joint_{i}" for i in range(len(joint_indices))]
             self.joint_names = [f"joint_{i}" for i in range(len(joint_indices))]
 
@@ -83,34 +73,12 @@ class RobotInstance:
 
     def _setup_observation_space(self):
         """Set up observation space for this robot."""
-        joint_space = {
-            "position": {
-                motor: {"shape": (), "dtype": np.dtype(np.float32), "names": None}
-                for motor in self.motor_names
-            },
-            "velocity": {
-                motor: {"shape": (), "dtype": np.dtype(np.float32), "names": None}
-                for motor in self.motor_names
-            },
-        }
-
-        end_effector_space = {
-            "position": {
-                "shape": (3,),
-                "dtype": np.dtype(np.float32),
-                "names": ["x", "y", "z"],
-            },
-            "orientation": {
-                "shape": (9,),
-                "dtype": np.dtype(np.float32),
-                "names": None,
-            },
-        }
-
-        return {"joint": joint_space, "end_effector": end_effector_space}
+        return setup_observation_space(self.motor_names)
 
     def _setup_action_space(self):
         """Set up action space for this robot."""
+        # Note: multi-robot server uses a slightly different action space format
+        # but we can still use the motor names
         return {
             "joints": {
                 "shape": (len(self.motor_names),),
@@ -296,16 +264,9 @@ class MultiRobotSimulatorServicer(robot_service_pb2_grpc.RobotControlServiceServ
                 else:
                     calibrated_pos = raw_pos
 
-                # Normalize to [-100, 100] for joints, [0, 100] for gripper
-                if motor_name == "gripper":
-                    # Gripper uses [0, 100] range
-                    normalized_pos = np.clip((calibrated_pos + 0.174) / 1.924 * 100, 0, 100)
-                else:
-                    # Other joints use [-100, 100] range
-                    joint_range = self.model.jnt_range[joint_idx]
-                    range_span = joint_range[1] - joint_range[0]
-                    normalized_pos = ((calibrated_pos - joint_range[0]) / range_span - 0.5) * 200
-                    normalized_pos = np.clip(normalized_pos, -100, 100)
+                # Normalize position
+                joint_range = self.model.jnt_range[joint_idx]
+                normalized_pos = normalize_position(calibrated_pos, joint_range, motor_name)
 
                 positions[motor_name] = float(normalized_pos)
                 velocities[motor_name] = float(raw_vel)
@@ -337,18 +298,10 @@ class MultiRobotSimulatorServicer(robot_service_pb2_grpc.RobotControlServiceServ
                     if motor_name in positions:
                         normalized_pos = positions[motor_name]
 
-                        # Denormalize from [-100, 100] or [0, 100] to joint range
+                        # Denormalize position
                         joint_idx = robot.joint_indices[i]
                         joint_range = self.model.jnt_range[joint_idx]
-
-                        if motor_name == "gripper":
-                            # Gripper uses [0, 100] -> actual range
-                            raw_pos = (normalized_pos / 100) * 1.924 - 0.174
-                        else:
-                            # Other joints use [-100, 100] -> actual range
-                            raw_pos = (normalized_pos / 200 + 0.5) * (
-                                joint_range[1] - joint_range[0]
-                            ) + joint_range[0]
+                        raw_pos = denormalize_position(normalized_pos, joint_range, motor_name)
 
                         # Apply calibration if available
                         if robot.is_calibrated and motor_name in robot.calibration:

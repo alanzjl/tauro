@@ -1,0 +1,11 @@
+# Single robot configuration for backward compatibility
+# This is the default configuration when no scene is specified
+
+scene:
+  base_scene: empty_scene.xml
+
+robots:
+  - id: "robot_001"
+    type: "so100_follower"
+    position: [0, 0, 0]
+    rotation: [0, 0, 0]

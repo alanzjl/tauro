@@ -168,6 +168,18 @@ class SceneBuilder:
         # Start with base scene
         scene_root = copy.deepcopy(self.base_root)
 
+        # Fix compiler meshdir to use absolute path
+        compiler = scene_root.find("compiler")
+        if compiler is None:
+            compiler = ET.Element("compiler")
+            scene_root.insert(0, compiler)
+
+        # Set meshdir to absolute path of robot assets
+        assets_path = (
+            Path(__file__).parent.parent.parent / "tauro_common" / "models" / "so_arm100" / "assets"
+        ).resolve()
+        compiler.set("meshdir", str(assets_path) + "/")
+
         # Process robots first to merge assets and defaults
         robots = self.robot_config.get("robots", [])
         if robots:
@@ -244,10 +256,8 @@ class SceneBuilder:
                     self._rename_elements(exclude_copy, robot_id)
                     scene_contact.append(exclude_copy)
 
-        # Write to temporary file
-        temp_file = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".xml", delete=False, dir=Path(self.base_scene_path).parent
-        )
+        # Write to temporary file in system temp directory
+        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False)
 
         tree = ET.ElementTree(scene_root)
         tree.write(temp_file.name, encoding="unicode", xml_declaration=True)
