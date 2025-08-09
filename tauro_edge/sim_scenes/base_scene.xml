@@ -1,0 +1,30 @@
+<mujoco model="base_scene">
+  <compiler angle="radian" meshdir="../../tauro_common/models/so_arm100/assets/"/>
+
+  <option cone="elliptic" impratio="10" integrator="implicitfast"/>
+
+  <asset>
+    <!-- Ground and environment materials -->
+    <material name="ground_mat" rgba="0.5 0.5 0.5 1"/>
+    <material name="table_mat" rgba="0.7 0.5 0.3 1"/>
+    <material name="wall_mat" rgba="0.9 0.9 0.9 1"/>
+  </asset>
+
+  <worldbody>
+    <!-- Ground plane -->
+    <geom name="ground" type="plane" size="3 3 0.1" material="ground_mat"/>
+    
+    <!-- Lighting -->
+    <light name="main_light" pos="0 0 3" dir="0 0 -1" diffuse="0.8 0.8 0.8" specular="0.3 0.3 0.3"/>
+    <light name="ambient_light" pos="2 2 2" dir="-1 -1 -1" diffuse="0.4 0.4 0.4"/>
+    
+    <!-- Optional table (can be commented out if not needed) -->
+    <body name="table" pos="0 0 0.4">
+      <geom name="table_top" type="box" size="0.6 0.4 0.02" material="table_mat"/>
+      <geom name="table_leg1" type="cylinder" pos="0.5 0.3 -0.2" size="0.02 0.2" material="table_mat"/>
+      <geom name="table_leg2" type="cylinder" pos="-0.5 0.3 -0.2" size="0.02 0.2" material="table_mat"/>
+      <geom name="table_leg3" type="cylinder" pos="0.5 -0.3 -0.2" size="0.02 0.2" material="table_mat"/>
+      <geom name="table_leg4" type="cylinder" pos="-0.5 -0.3 -0.2" size="0.02 0.2" material="table_mat"/>
+    </body>
+  </worldbody>
+</mujoco>

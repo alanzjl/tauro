@@ -1,0 +1,25 @@
+# Configuration for four robot simulation scene
+scene:
+  name: "four_robots"
+  base_scene: "base_scene.xml"  # with table
+
+robots:
+  - id: "robot_001"
+    type: "so100_follower"
+    position: [0.3, 0.3, 0.42]    # on table
+    rotation: [0, 0, -0.785]       # -45 degrees
+    
+  - id: "robot_002"
+    type: "so100_follower"
+    position: [-0.3, 0.3, 0.42]   # on table
+    rotation: [0, 0, 0.785]        # 45 degrees
+    
+  - id: "robot_003"
+    type: "so100_follower"
+    position: [0.3, -0.3, 0.42]    # on table
+    rotation: [0, 0, -2.356]       # -135 degrees
+    
+  - id: "robot_004"
+    type: "so100_follower"
+    position: [-0.3, -0.3, 0.42]   # on table
+    rotation: [0, 0, 2.356]        # 135 degrees

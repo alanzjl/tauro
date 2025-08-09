@@ -1,0 +1,36 @@
+<mujoco model="two_robots_scene">
+  <compiler angle="radian" autolimits="true">
+    <!-- Use namespace prefix to avoid naming conflicts -->
+    <lengthrange builtin="0.005 0.5"/>
+  </compiler>
+
+  <option cone="elliptic" impratio="10"/>
+
+  <asset>
+    <!-- Define colors for the robots -->
+    <material name="ground_mat" rgba="0.3 0.3 0.3 1"/>
+  </asset>
+
+  <worldbody>
+    <!-- Ground plane -->
+    <geom name="ground" type="plane" size="2 2 0.1" material="ground_mat"/>
+    
+    <!-- Robot 1 - include with namespace prefix -->
+    <body name="robot_001_base" pos="0.3 0 0">
+      <include file="../../tauro_common/models/so_arm100/so_arm100.xml">
+        <rename>
+          prefix="robot_001/"
+        </rename>
+      </include>
+    </body>
+
+    <!-- Robot 2 - include with namespace prefix -->
+    <body name="robot_002_base" pos="-0.3 0 0">
+      <include file="../../tauro_common/models/so_arm100/so_arm100.xml">
+        <rename>
+          prefix="robot_002/"
+        </rename>
+      </include>
+    </body>
+  </worldbody>
+</mujoco>

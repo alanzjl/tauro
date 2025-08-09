@@ -40,6 +40,7 @@ def main():
     sim_parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
     sim_parser.add_argument("--port", type=int, default=DEFAULT_GRPC_PORT, help="Port to bind to")
     sim_parser.add_argument("--config", type=Path, help="Path to simulator configuration")
+    sim_parser.add_argument("--scene", type=Path, help="Path to scene configuration YAML")
     sim_parser.add_argument("--log-level", default="INFO", help="Logging level")
     sim_parser.add_argument(
         "--no-vis", action="store_true", help="Disable visualization (default: enabled)"
@@ -76,11 +77,21 @@ def main():
                 serve(args.host, args.port)
 
         elif args.command == "simulator":
-            from tauro_edge.server.simulator_server import serve
+            if args.scene:
+                # Use multi-robot simulator for scene-based simulations
+                from tauro_edge.server.multi_robot_simulator_server import serve
 
-            logger.info(f"Starting simulator server on {args.host}:{args.port}")
-            logger.info(f"Visualization: {'disabled' if args.no_vis else 'enabled'}")
-            serve(args.host, args.port, args.config, enable_visualization=not args.no_vis)
+                logger.info(f"Starting multi-robot simulator server on {args.host}:{args.port}")
+                logger.info(f"Scene config: {args.scene}")
+                logger.info(f"Visualization: {'disabled' if args.no_vis else 'enabled'}")
+                serve(args.host, args.port, args.scene, enable_visualization=not args.no_vis)
+            else:
+                # Use original simulator for single robot
+                from tauro_edge.server.simulator_server import serve
+
+                logger.info(f"Starting simulator server on {args.host}:{args.port}")
+                logger.info(f"Visualization: {'disabled' if args.no_vis else 'enabled'}")
+                serve(args.host, args.port, args.config, enable_visualization=not args.no_vis)
 
     except KeyboardInterrupt:
         logger.info("Server shutdown requested")

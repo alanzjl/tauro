@@ -1,0 +1,15 @@
+# Configuration for two robot simulation scene
+scene:
+  name: "two_robots"
+  base_scene: "base_scene.xml"  # Using scene with table
+
+robots:
+  - id: "robot_001"
+    type: "so100_follower"
+    position: [0.2, -0.3, 0.42]      # Right edge of table top
+    rotation: [0, 0, 0]      # Facing inward (180 degrees)
+    
+  - id: "robot_002"
+    type: "so100_follower"
+    position: [-0.2, -0.3, 0.42]     # Left edge of table top
+    rotation: [0, 0, 0]           # Facing inward (0 degrees)
