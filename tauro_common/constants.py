@@ -34,6 +34,6 @@ default_calibration_path = default_cache_path / "calibration"
 
 # gRPC settings
 DEFAULT_GRPC_PORT = 50051
-DEFAULT_GRPC_HOST = "localhost"
+DEFAULT_GRPC_HOST = "0.0.0.0"
 MAX_MESSAGE_SIZE = 10 * 1024 * 1024  # 10MB
 KEEPALIVE_TIME_MS = 10000  # 10 seconds

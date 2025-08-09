@@ -30,7 +30,7 @@ def main():
 
     # Sensor server
     sensor_parser = subparsers.add_parser("sensor", help="Run sensor/camera server")
-    sensor_parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
+    sensor_parser.add_argument("--host", default=DEFAULT_GRPC_HOST, help="Host to bind to")
     sensor_parser.add_argument("--port", type=int, default=50052, help="Port to bind to")
     sensor_parser.add_argument("--config", type=Path, help="Path to sensor configuration")
     sensor_parser.add_argument("--log-level", default="INFO", help="Logging level")
