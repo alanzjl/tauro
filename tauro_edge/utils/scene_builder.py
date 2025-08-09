@@ -48,11 +48,19 @@ class SceneBuilder:
 
         if "body1" in element.attrib:
             original_body1 = element.get("body1")
-            element.set("body1", f"{prefix}/{original_body1}")
+            # Special case for "Base" which gets renamed to prefix directly
+            if original_body1 == "Base":
+                element.set("body1", prefix)
+            else:
+                element.set("body1", f"{prefix}/{original_body1}")
 
         if "body2" in element.attrib:
             original_body2 = element.get("body2")
-            element.set("body2", f"{prefix}/{original_body2}")
+            # Special case for "Base" which gets renamed to prefix directly
+            if original_body2 == "Base":
+                element.set("body2", prefix)
+            else:
+                element.set("body2", f"{prefix}/{original_body2}")
 
         # Recursively process children
         for child in element:
@@ -203,18 +211,18 @@ class SceneBuilder:
                 if robot_base is None:
                     continue
 
-            # Create wrapper body with position and orientation
-            wrapper = ET.SubElement(
-                worldbody, "body", name=robot_id, pos=" ".join(str(p) for p in position)
-            )
-
-            if rotation != [0, 0, 0]:
-                wrapper.set("euler", " ".join(str(r) for r in rotation))
-
             # Copy robot body and rename all elements
             robot_body = copy.deepcopy(robot_base)
             self._rename_elements(robot_body, robot_id)
-            wrapper.append(robot_body)
+
+            # Apply position and rotation directly to the robot base
+            robot_body.set("name", robot_id)
+            robot_body.set("pos", " ".join(str(p) for p in position))
+            if rotation != [0, 0, 0]:
+                robot_body.set("euler", " ".join(str(r) for r in rotation))
+
+            # Add to worldbody
+            worldbody.append(robot_body)
 
             # Copy and adapt actuators
             robot_actuators = robot_root.find("actuator")
@@ -223,6 +231,18 @@ class SceneBuilder:
                     act_copy = copy.deepcopy(actuator)
                     self._rename_elements(act_copy, robot_id)
                     actuators.append(act_copy)
+
+            # Copy and adapt contact exclusions
+            robot_contact = robot_root.find("contact")
+            if robot_contact is not None:
+                scene_contact = scene_root.find("contact")
+                if scene_contact is None:
+                    scene_contact = ET.SubElement(scene_root, "contact")
+
+                for exclude in robot_contact.findall("exclude"):
+                    exclude_copy = copy.deepcopy(exclude)
+                    self._rename_elements(exclude_copy, robot_id)
+                    scene_contact.append(exclude_copy)
 
         # Write to temporary file
         temp_file = tempfile.NamedTemporaryFile(
