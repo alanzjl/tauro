@@ -161,43 +161,65 @@ async def mirror_control(
 
         start_time = time.time()
 
+        # Shared state for the leader position
+        leader_position = {"positions": None, "lock": asyncio.Lock()}
+
         # Move robot 1 through a smooth trajectory
         # Robot 2 will mirror its positions
         async def move_leader():
             """Move the leader robot through a trajectory."""
             positions = [0, 30, 0, -30, 0, 20, -20, 0]
+
+            # Get initial joint names
+            state = await robot1.get_robot_state()
+            joints = list(state.joints.keys())
+
             for pos in positions:
                 if time.time() - start_time > duration - 2:
                     break
 
-                state = await robot1.get_robot_state()
-                joints = list(state.joints.keys())
                 action = {"joints": {"position": {k: pos for k in joints}}}
                 await robot1.send_action(action)
+
+                # Update shared state with the target position
+                async with leader_position["lock"]:
+                    leader_position["positions"] = {k: pos for k in joints}
+
+                print(f"[Robot 1] Moving to {pos}")
                 await asyncio.sleep(1.5)
 
             # Go to home position
             await robot1.goto_home_position()
             print("[Robot 1] Going to home position")
+
+            # Update shared state to home position
+            async with leader_position["lock"]:
+                leader_position["positions"] = {k: 0 for k in joints}
+
             await asyncio.sleep(2)
 
         async def follow_leader():
             """Make robot 2 follow robot 1's positions."""
+            last_positions = None
+
             while time.time() - start_time < duration:
-                # Get robot 1's current position
-                state1 = await robot1.get_robot_state()
+                # Get the leader's target position from shared state
+                async with leader_position["lock"]:
+                    current_positions = leader_position["positions"]
 
-                # Mirror to robot 2 (could add transformations here)
-                mirror_positions = {}
-                for joint_name, joint_state in state1.joints.items():
-                    # Simple mirroring - could be more complex
-                    mirror_positions[joint_name] = joint_state.position
-
-                action = {"joints": {"position": mirror_positions}}
-                await robot2.send_action(action)
+                # If we have positions and they've changed, update robot 2
+                if current_positions and current_positions != last_positions:
+                    action = {"joints": {"position": current_positions}}
+                    await robot2.send_action(action)
+                    print(f"[Robot 2] Mirroring to {list(current_positions.values())[0]:.1f}")
+                    last_positions = current_positions.copy()
 
                 # Update rate for following
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)
+
+            # Final home position for robot 2
+            await robot2.goto_home_position()
+            print("[Robot 2] Going to home position")
 
         # Run both tasks concurrently
         await asyncio.gather(
