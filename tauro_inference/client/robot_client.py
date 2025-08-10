@@ -13,7 +13,12 @@ import grpc
 import grpc.aio
 from google.protobuf import empty_pb2
 
-from tauro_common.constants import DEFAULT_GRPC_HOST, DEFAULT_GRPC_PORT, MAX_MESSAGE_SIZE
+from tauro_common.constants import (
+    DEFAULT_GRPC_HOST,
+    DEFAULT_GRPC_PORT,
+    HOME_POSITION,
+    MAX_MESSAGE_SIZE,
+)
 from tauro_common.proto import robot_service_pb2, robot_service_pb2_grpc
 from tauro_common.types.robot_types import (
     ControlCommand,
@@ -329,6 +334,11 @@ class RobotClient:
         except grpc.RpcError as e:
             logger.error(f"gRPC error sending action: {e}")
             return False
+
+    @sync_async_method
+    async def goto_home_position(self):
+        """Go to the home position."""
+        await self.send_action({"joints": {"position": HOME_POSITION}})
 
     @sync_async_method
     async def health_check(self) -> robot_service_pb2.HealthStatus:

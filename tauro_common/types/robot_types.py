@@ -86,5 +86,5 @@ class MotorCalibration:
 
     motor_name: str
     offset: float
-    homing_position: float = 0.0
-    index_position: float = 0.0
+    homing_position: float = 0.0  # range_min
+    index_position: float = 0.0  # range_max

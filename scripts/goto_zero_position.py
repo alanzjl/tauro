@@ -10,6 +10,13 @@ import time
 from tauro_inference.client import RobotClient
 
 
+def print_joint_positions(robot):
+    print("Current joint positions:")
+    state = robot.get_robot_state()
+    joint_positions = {k: v.position for k, v in state.joints.items()}
+    print(joint_positions)
+
+
 def goto_zero_position(robot):
     """Test joint space control by applying small deltas to current positions."""
     print("\n=== Testing Joint Space Control ===")
@@ -21,23 +28,30 @@ def goto_zero_position(robot):
     joint_positions = {}
     for motor_name, val in state.joints.items():
         joint_positions[motor_name] = val.position
-    print(joint_positions)
+    print_joint_positions(robot)
 
     # Send action to move to zero position
     time.sleep(1)
     action = {"joints": {"position": {k: 0.0 for k in joint_positions.keys()}}}
     robot.send_action(action)
+    print_joint_positions(robot)
     time.sleep(3)
 
     # Go to a random position
     action = {"joints": {"position": {k: 20.0 for k in joint_positions.keys()}}}
     robot.send_action(action)
+    print_joint_positions(robot)
     time.sleep(3)
 
     # Go to a random position
     action = {"joints": {"position": {k: -20.0 for k in joint_positions.keys()}}}
     robot.send_action(action)
-    time.sleep(5)
+    print_joint_positions(robot)
+    time.sleep(3)
+
+    # Go back to the home position
+    robot.goto_home_position()
+    time.sleep(3)
 
 
 async def goto_zero_position_async(robot):

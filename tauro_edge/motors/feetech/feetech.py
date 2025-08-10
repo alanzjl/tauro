@@ -250,8 +250,10 @@ class FeetechMotorsBus(MotorsBus):
             self.write("Return_Delay_Time", motor, 0)
             # Set 'Maximum_Acceleration' to 254 to speedup acceleration and deceleration of the motors.
             # Note: this address is not in the official STS3215 Memory Table
-            self.write("Maximum_Acceleration", motor, 254)
-            self.write("Acceleration", motor, 254)
+            self.write("Maximum_Acceleration", motor, 32)
+            self.write("Acceleration", motor, 32)
+            self.write("P_Coefficient", motor, 128)
+            self.write("D_Coefficient", motor, 32)
 
     @property
     def is_calibrated(self) -> bool:

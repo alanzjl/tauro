@@ -37,3 +37,12 @@ DEFAULT_GRPC_PORT = 50051
 DEFAULT_GRPC_HOST = "0.0.0.0"
 MAX_MESSAGE_SIZE = 10 * 1024 * 1024  # 10MB
 KEEPALIVE_TIME_MS = 10000  # 10 seconds
+
+HOME_POSITION = {
+    "shoulder_pan": 0,
+    "elbow_flex": 100.0,
+    "wrist_roll": 0.0,
+    "wrist_flex": 45,
+    "gripper": 0,
+    "shoulder_lift": -90,
+}

@@ -50,6 +50,11 @@ async def move_robot_sequence(robot: RobotClient, robot_name: str, offset: float
         new_positions = {k: v.position for k, v in state.joints.items()}
         print(f"[{robot_name}] New positions: {list(new_positions.values())[0]:.1f}")
 
+    # Go to home position
+    await robot.goto_home_position()
+    print(f"[{robot_name}] Going to home position")
+    await asyncio.sleep(2)
+
     print(f"[{robot_name}] Movement sequence complete")
 
 
@@ -107,7 +112,7 @@ async def control_two_robots_interleaved(
         joints2 = list(state2.joints.keys())
 
         # Alternating movements
-        positions = [0, 20, -20, 40, -40, 0]
+        positions = [0, 20, -20, 30, -30, 0]
 
         for i, pos in enumerate(positions):
             # Alternate between robots
@@ -125,13 +130,20 @@ async def control_two_robots_interleaved(
             # Small delay to see the movement
             await asyncio.sleep(1.5)
 
+        # Go to home position
+        await robot1.goto_home_position()
+        await robot2.goto_home_position()
+        print("[Robot 1] Going to home position")
+        print("[Robot 2] Going to home position")
+        await asyncio.sleep(2)
+
         print("\n=== Interleaved control complete ===")
 
 
 async def mirror_control(
     robot1_config: dict,
     robot2_config: dict,
-    duration: float = 10.0,
+    duration: float = 12.0,
 ):
     """
     Mirror control: Robot 2 mirrors Robot 1's position in real-time.
@@ -155,7 +167,7 @@ async def mirror_control(
             """Move the leader robot through a trajectory."""
             positions = [0, 30, 0, -30, 0, 20, -20, 0]
             for pos in positions:
-                if time.time() - start_time > duration:
+                if time.time() - start_time > duration - 2:
                     break
 
                 state = await robot1.get_robot_state()
@@ -163,6 +175,11 @@ async def mirror_control(
                 action = {"joints": {"position": {k: pos for k in joints}}}
                 await robot1.send_action(action)
                 await asyncio.sleep(1.5)
+
+            # Go to home position
+            await robot1.goto_home_position()
+            print("[Robot 1] Going to home position")
+            await asyncio.sleep(2)
 
         async def follow_leader():
             """Make robot 2 follow robot 1's positions."""
@@ -206,7 +223,7 @@ async def main():
     parser.add_argument("--robot2-id", default="robot_002", help="Second robot ID")
     parser.add_argument("--robot2-type", default="so100_follower", help="Second robot type")
     parser.add_argument("--robot2-host", default="127.0.0.1", help="Second robot server host")
-    parser.add_argument("--robot2-port", type=int, default=50052, help="Second robot server port")
+    parser.add_argument("--robot2-port", type=int, default=50051, help="Second robot server port")
 
     # Control mode
     parser.add_argument(
